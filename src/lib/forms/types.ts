@@ -104,6 +104,11 @@ export interface WorkflowNode {
   service?: "pdf" | "archive" | "storage" | "http" | "webhook";
   /** Absolute URL for http/webhook service nodes. */
   url?: string;
+  /** Relative delay before the runner continues. Zero fires immediately. */
+  delayMs?: number;
+  /** Parallel join policy. Default is all incoming branches. */
+  join?: "all" | "any" | "n";
+  joinCount?: number;
 }
 
 export interface WorkflowEdge {
@@ -189,6 +194,9 @@ export type SubmissionStatus = "draft" | "submitted" | "in_review" | "changes_re
 export interface WorkflowState {
   currentNode: string;
   history: { node: string; at: string; action: string; actor: string; note?: string }[];
+  /** ISO time after which a timer node may continue. Persisted with the submission. */
+  waitUntil?: string;
+  tokens?: { id: string; branchId: string; nodeId: string; status: "active" | "arrived" | "done" | "cancelled" }[];
 }
 
 export interface ArchivedDocument {

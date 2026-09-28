@@ -9,7 +9,8 @@ import { lintBlocksPublish, lintForm, type LintIssue } from "./lint.ts";
 import { incidentForm, supplierForm } from "./templates.ts";
 import { mapComponents } from "./tree.ts";
 import type { FormDefinition, FormVersion, IdempotencyRecord, Submission } from "./types.ts";
-import { advanceServices, edgeTo, startWorkflow } from "./workflow-run.ts";
+import { applyHumanAction } from "./gateways.ts";
+import { advanceServices, startWorkflow } from "./workflow-run.ts";
 
 export interface PaletteCommand {
   id: string;
@@ -48,6 +49,7 @@ interface FormState {
   audit: AuditEvent[];
   webhooks: WebhookEndpoint[];
   createOpen: boolean;
+  serverRevision: number;
   palette: PaletteCommand[];
   setHydrated: (value: boolean) => void;
   setCreateOpen: (open: boolean) => void;
@@ -288,6 +290,7 @@ export const useFormStore = create<FormState>()(
     (set, get) => ({
       hydrated: false,
       createOpen: false,
+      serverRevision: 0,
       palette: [],
       role: "owner",
       connections: [LOCAL_CONNECTION],
@@ -502,21 +505,13 @@ export const useFormStore = create<FormState>()(
           set({ submissions: get().submissions.map((item) => (item.id === submissionId ? next : item)) });
           return { ok: true };
         }
-        const when = action === "approve" ? "approved" : "rejected";
-        const target = edgeTo(form, current.workflow.currentNode, when);
-        let next: Submission = {
-          ...current,
-          updatedAt: now,
-          workflow: {
-            currentNode: target ?? current.workflow.currentNode,
-            history: [...current.workflow.history, { node: current.workflow.currentNode, at: now, action: when, actor, note }],
-          },
-        };
-        if (action === "reject") {
-          const landed = form.workflow.nodes.find((node) => node.id === next.workflow?.currentNode);
-          next.status = landed?.type === "end" || !target ? "rejected" : "in_review";
-          if (!target) next.status = "rejected";
+        const workflow = applyHumanAction(form, current.workflow, action === "approve" ? "approve" : "reject", actor, note, now);
+        let next: Submission = { ...current, updatedAt: now, workflow };
+        if (action === "reject" && workflow.currentNode === current.workflow.currentNode && !(workflow.tokens?.length)) {
+          next.status = "rejected";
         }
+        const landedEarly = form.workflow.nodes.find((node) => node.id === workflow.currentNode);
+        if (action === "reject" && (landedEarly?.type === "end" || /reject/i.test(landedEarly?.title ?? ""))) next.status = "rejected";
         rememberConnections(get().connections ?? []);
         next = await advanceServices(form, next, "Meridian");
         set({
@@ -544,6 +539,7 @@ export const useFormStore = create<FormState>()(
         connections: state.connections,
         audit: state.audit,
         webhooks: state.webhooks,
+        serverRevision: state.serverRevision,
       }),
     },
   ),

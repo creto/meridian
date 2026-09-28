@@ -9,6 +9,7 @@ screenshots
 attachments
 artifacts
 *.log
+data/
 .env
 .env.*
 !.env.example

@@ -1,4 +1,5 @@
 import { evalBool } from "./expressions.ts";
+import { joinReady, scheduleTimer, splitParallel, timerDue } from "./gateways.ts";
 import { uid } from "./ids.ts";
 import { submissionPdf, sha256Bytes } from "./pdf.ts";
 import { inputLabels } from "./schema-export.ts";
@@ -122,17 +123,53 @@ export async function advanceServices(form: FormDefinition, submission: Submissi
   let current = submission.workflow.currentNode;
   const history = submission.workflow.history.slice();
   const documents = submission.documents.slice();
+  let waitUntil = submission.workflow.waitUntil;
+  let tokens = submission.workflow.tokens;
   for (let guard = 0; guard < 8; guard += 1) {
     const node = form.workflow.nodes.find((item) => item.id === current);
     if (!node) break;
-    if (node.type === "timer" || node.type === "parallel" || node.type === "join") {
-      history.push({
-        node: node.id,
-        at: new Date().toISOString(),
-        action: "not-executed",
-        actor,
-        note: "Durable timers and parallel gateways are stored as configuration and are not executed.",
-      });
+    if (node.type === "timer") {
+      if (!waitUntil) {
+        const plan = scheduleTimer(node.delayMs ?? 0);
+        if (!plan.fireNow && plan.waitUntil) {
+          history.push({ node: node.id, at: new Date().toISOString(), action: "timer-scheduled", actor, note: plan.waitUntil });
+          waitUntil = plan.waitUntil;
+          break;
+        }
+      } else if (!timerDue(waitUntil)) {
+        break;
+      }
+      history.push({ node: node.id, at: new Date().toISOString(), action: "timer-fired", actor });
+      waitUntil = undefined;
+      const next = edgeTo(form, node.id, "approved");
+      if (!next) break;
+      current = next;
+      continue;
+    }
+    if (node.type === "parallel") {
+      if (!tokens?.length) {
+        tokens = splitParallel(form, node.id);
+        history.push({ node: node.id, at: new Date().toISOString(), action: "split", actor, note: `${tokens.length} branches` });
+      }
+      const gate = joinReady(form, tokens);
+      if (gate.ready && gate.next) {
+        history.push({ node: gate.joinId ?? node.id, at: new Date().toISOString(), action: "joined", actor, note: "all" });
+        tokens = tokens.map((token) => (token.nodeId === gate.joinId ? { ...token, status: "done" as const } : token));
+        current = gate.next;
+        continue;
+      }
+      const active = tokens.find((token) => token.status === "active");
+      if (active) current = active.nodeId;
+      break;
+    }
+    if (node.type === "join") {
+      const gate = joinReady(form, tokens ?? []);
+      if (gate.ready && gate.next) {
+        history.push({ node: node.id, at: new Date().toISOString(), action: "joined", actor });
+        current = gate.next;
+        continue;
+      }
+      history.push({ node: node.id, at: new Date().toISOString(), action: "waiting-join", actor });
       break;
     }
     if (!automatic(node.type)) break;
@@ -218,7 +255,7 @@ export async function advanceServices(form: FormDefinition, submission: Submissi
   let status: SubmissionStatus = submission.status;
   if (landed?.type === "end") status = /reject/i.test(landed.title) || landed.id === "rejected" ? "rejected" : "approved";
   else if (landed?.type === "human" || landed?.type === "approval") status = "in_review";
-  return { ...submission, documents, status, updatedAt: new Date().toISOString(), workflow: { currentNode: current, history } };
+  return { ...submission, documents, status, updatedAt: new Date().toISOString(), workflow: { currentNode: current, history, waitUntil, tokens } };
 }
 
 export function startWorkflow(form: FormDefinition, actor: string): WorkflowState | undefined {

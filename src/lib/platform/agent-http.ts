@@ -7,14 +7,41 @@ import { mcpTools } from "./mcp.ts";
 import { advanceServices, startWorkflow } from "../forms/workflow-run.ts";
 import type { FormDefinition, Submission } from "../forms/types.ts";
 import { mutateSnapshot, readSnapshot, writeSnapshot, type WorkspaceSnapshot } from "./snapshot.ts";
+import { bootPlatform, persistSnapshot, sameWorkspace } from "./durable-server.ts";
+import { workspaceHash } from "./durable.ts";
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status });
 }
 
-function ensureSeed() {
+async function commit(snap: WorkspaceSnapshot): Promise<WorkspaceSnapshot> {
+  await persistSnapshot(snap);
+  return snap;
+}
+
+async function resumeTimers(): Promise<void> {
+  const snap = readSnapshot();
+  let changed = false;
+  const submissions = [];
+  for (const submission of snap.submissions) {
+    if (submission.workflow?.waitUntil && Date.parse(submission.workflow.waitUntil) <= Date.now()) {
+      const form = snap.forms.find((item) => item.id === submission.formId);
+      if (form) {
+        submissions.push(await advanceServices(form, submission, "timer"));
+        changed = true;
+        continue;
+      }
+    }
+    submissions.push(submission);
+  }
+  if (!changed) return;
+  await commit(writeSnapshot({ ...snap, revision: snap.revision + 1, submissions }));
+}
+
+async function ensureSeed() {
   if (readSnapshot().forms.length > 0) return;
-  writeSnapshot({ revision: 1, forms: [supplierForm(), incidentForm()], submissions: [], idempotency: [] });
+  const seeded = writeSnapshot({ revision: 1, forms: [supplierForm(), incidentForm()], submissions: [], idempotency: [] });
+  await persistSnapshot(seeded);
 }
 
 function findForm(nameOrId: string): FormDefinition | undefined {
@@ -23,17 +50,26 @@ function findForm(nameOrId: string): FormDefinition | undefined {
 }
 
 export async function handleAgent(method: string, path: string, request: Request): Promise<Response> {
-  ensureSeed();
+  await bootPlatform();
+  await resumeTimers();
+  await ensureSeed();
   const parts = path.split("/").filter(Boolean);
+  if (method === "GET" && parts[0] === "health" && parts[1] === "live") return json({ ok: true, status: "live" });
+  if (method === "GET" && parts[0] === "health" && parts[1] === "ready") return json({ ok: true, status: "ready", persistence: "postgresql" });
   if (method === "POST" && parts[0] === "sync") {
     const body = (await request.json()) as WorkspaceSnapshot;
-    const saved = writeSnapshot({
+    const current = readSnapshot();
+    const incoming: WorkspaceSnapshot = {
       revision: body.revision ?? 0,
       forms: body.forms ?? [],
       submissions: body.submissions ?? [],
       idempotency: body.idempotency ?? [],
-    });
-    return json({ revision: saved.revision });
+    };
+    if (sameWorkspace(current, incoming)) return json(current);
+    if ((body.revision ?? 0) < current.revision && current.forms.length > 0) return json(current);
+    const saved = writeSnapshot({ ...incoming, revision: Math.max(current.revision, body.revision ?? 0) + 1 });
+    await commit(saved);
+    return json({ ...saved, contentHash: workspaceHash(saved) });
   }
   if (method === "GET" && parts[0] === "sync") return json(readSnapshot());
   if (method === "GET" && parts.length === 1 && parts[0] === "forms") {
@@ -106,6 +142,7 @@ export async function handleAgent(method: string, path: string, request: Request
       submissions: [submission, ...current.submissions],
       idempotency: key ? [...current.idempotency.filter((item) => item.key !== key), { key, hash, submissionId: submission.id, at: now }] : current.idempotency,
     }));
+    await commit(readSnapshot());
     return json({ submissionId: submission.id, status: submission.status, workflow: submission.workflow, documents: submission.documents });
   }
   if (method === "GET" && parts[0] === "submissions" && parts[1]) {
@@ -124,6 +161,7 @@ export async function handleAgent(method: string, path: string, request: Request
         return updated;
       }),
     }));
+    await commit(readSnapshot());
     return updated ? json(updated) : json({ error: { code: "NOT_FOUND", message: "Submission not found" } }, 404);
   }
   return json({ error: { code: "NOT_FOUND", message: `No agent route for ${method} /${path}` } }, 404);

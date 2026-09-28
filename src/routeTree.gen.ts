@@ -16,6 +16,8 @@ import { Route as DeveloperRouteImport } from './routes/developer'
 import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as ReferenceRouteImport } from './routes/reference'
 import { Route as FillFormIdRouteImport } from './routes/fill.$formId'
+import { Route as HealthLiveRouteImport } from './routes/health.live'
+import { Route as HealthReadyRouteImport } from './routes/health.ready'
 import { Route as StudioFormIdRouteImport } from './routes/studio.$formId'
 import { Route as ApiHooksDeliverRouteImport } from './routes/api/hooks/deliver'
 import { Route as ApiStoragePutRouteImport } from './routes/api/storage/put'
@@ -57,6 +59,16 @@ const FillFormIdRoute = FillFormIdRouteImport.update({
   path: '/fill/$formId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HealthLiveRoute = HealthLiveRouteImport.update({
+  id: '/health/live',
+  path: '/health/live',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HealthReadyRoute = HealthReadyRouteImport.update({
+  id: '/health/ready',
+  path: '/health/ready',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StudioFormIdRoute = StudioFormIdRouteImport.update({
   id: '/studio/$formId',
   path: '/studio/$formId',
@@ -91,6 +103,8 @@ export interface FileRoutesByFullPath {
   '/inbox': typeof InboxRoute
   '/reference': typeof ReferenceRoute
   '/fill/$formId': typeof FillFormIdRoute
+  '/health/live': typeof HealthLiveRoute
+  '/health/ready': typeof HealthReadyRoute
   '/studio/$formId': typeof StudioFormIdRoute
   '/api/hooks/deliver': typeof ApiHooksDeliverRoute
   '/api/storage/put': typeof ApiStoragePutRoute
@@ -105,6 +119,8 @@ export interface FileRoutesByTo {
   '/inbox': typeof InboxRoute
   '/reference': typeof ReferenceRoute
   '/fill/$formId': typeof FillFormIdRoute
+  '/health/live': typeof HealthLiveRoute
+  '/health/ready': typeof HealthReadyRoute
   '/studio/$formId': typeof StudioFormIdRoute
   '/api/hooks/deliver': typeof ApiHooksDeliverRoute
   '/api/storage/put': typeof ApiStoragePutRoute
@@ -120,6 +136,8 @@ export interface FileRoutesById {
   '/inbox': typeof InboxRoute
   '/reference': typeof ReferenceRoute
   '/fill/$formId': typeof FillFormIdRoute
+  '/health/live': typeof HealthLiveRoute
+  '/health/ready': typeof HealthReadyRoute
   '/studio/$formId': typeof StudioFormIdRoute
   '/api/hooks/deliver': typeof ApiHooksDeliverRoute
   '/api/storage/put': typeof ApiStoragePutRoute
@@ -136,6 +154,8 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/reference'
     | '/fill/$formId'
+    | '/health/live'
+    | '/health/ready'
     | '/studio/$formId'
     | '/api/hooks/deliver'
     | '/api/storage/put'
@@ -150,6 +170,8 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/reference'
     | '/fill/$formId'
+    | '/health/live'
+    | '/health/ready'
     | '/studio/$formId'
     | '/api/hooks/deliver'
     | '/api/storage/put'
@@ -164,6 +186,8 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/reference'
     | '/fill/$formId'
+    | '/health/live'
+    | '/health/ready'
     | '/studio/$formId'
     | '/api/hooks/deliver'
     | '/api/storage/put'
@@ -179,6 +203,8 @@ export interface RootRouteChildren {
   InboxRoute: typeof InboxRoute
   ReferenceRoute: typeof ReferenceRoute
   FillFormIdRoute: typeof FillFormIdRoute
+  HealthLiveRoute: typeof HealthLiveRoute
+  HealthReadyRoute: typeof HealthReadyRoute
   StudioFormIdRoute: typeof StudioFormIdRoute
   ApiHooksDeliverRoute: typeof ApiHooksDeliverRoute
   ApiStoragePutRoute: typeof ApiStoragePutRoute
@@ -237,6 +263,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FillFormIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/health/live': {
+      id: '/health/live'
+      path: '/health/live'
+      fullPath: '/health/live'
+      preLoaderRoute: typeof HealthLiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/health/ready': {
+      id: '/health/ready'
+      path: '/health/ready'
+      fullPath: '/health/ready'
+      preLoaderRoute: typeof HealthReadyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/studio/$formId': {
       id: '/studio/$formId'
       path: '/studio/$formId'
@@ -283,6 +323,8 @@ const rootRouteChildren: RootRouteChildren = {
   InboxRoute: InboxRoute,
   ReferenceRoute: ReferenceRoute,
   FillFormIdRoute: FillFormIdRoute,
+  HealthLiveRoute: HealthLiveRoute,
+  HealthReadyRoute: HealthReadyRoute,
   StudioFormIdRoute: StudioFormIdRoute,
   ApiHooksDeliverRoute: ApiHooksDeliverRoute,
   ApiStoragePutRoute: ApiStoragePutRoute,

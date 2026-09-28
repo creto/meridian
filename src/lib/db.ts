@@ -111,7 +111,11 @@ async function createPgliteSql(): Promise<Sql> {
   // data survives source edits (it resets on dev-server restart).
   globalRef.__pgliteInstance__ ??= (async () => {
     const { PGlite } = await import("@electric-sql/pglite");
-    const pg = new PGlite({
+    const { mkdirSync } = await import("node:fs");
+    const { dirname } = await import("node:path");
+    const dataDir = process.env.PGLITE_DATA_DIR || `${process.cwd()}/data/pglite`;
+    mkdirSync(dirname(dataDir), { recursive: true });
+    const pg = new PGlite(dataDir, {
       parsers: {
         [OID_INT8]: Number,
         [OID_DATE]: identity,

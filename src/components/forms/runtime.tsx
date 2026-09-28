@@ -230,6 +230,7 @@ function GridEditor({
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [filter, setFilter] = useState("");
+  const [windowStart, setWindowStart] = useState(0);
   const update = (index: number, key: string, value: unknown) => {
     onChange(rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
   };
@@ -247,11 +248,20 @@ function GridEditor({
       return String(av ?? "").localeCompare(String(bv ?? "")) * sortDir;
     });
   }
+  const windowSize = 40;
+  const start = Math.min(windowStart, Math.max(0, visible.length - 1));
+  const pageRows = visible.slice(start, start + windowSize);
   return (
     <div className="overflow-x-auto rounded-lg border border-line">
       <div className="flex items-center gap-2 border-b border-line px-2 py-2">
         <input className="h-9 w-full max-w-xs rounded-md border border-line bg-elevated px-2 text-sm" value={filter} placeholder="Filter rows" aria-label="Filter rows" onChange={(event) => setFilter(event.target.value)} />
         <span className="text-xs text-muted">{visible.length} of {rows.length}</span>
+        {visible.length > windowSize ? (
+          <span className="flex gap-1">
+            <Button variant="ghost" className="h-9 px-2" disabled={start === 0} onClick={() => setWindowStart(Math.max(0, start - windowSize))}>Previous rows</Button>
+            <Button variant="ghost" className="h-9 px-2" disabled={start + windowSize >= visible.length} onClick={() => setWindowStart(start + windowSize)}>Next rows</Button>
+          </span>
+        ) : null}
       </div>
       <table className="w-full min-w-[36rem] border-collapse text-sm">
         <thead className="bg-paper text-left text-xs text-muted">
@@ -268,7 +278,7 @@ function GridEditor({
           </tr>
         </thead>
         <tbody>
-          {visible.map(({ row, index }) => (
+          {pageRows.map(({ row, index }) => (
             <tr key={index} className="border-t border-line">
               {cols.map((col) => (
                 <td key={col.id} className="px-2 py-2 align-top">

@@ -1,5 +1,7 @@
 import { fetchRetry, missing, requestId } from "./http.ts";
 import { sha256Hex } from "./sigv4.ts";
+import { mintGcsAssertion, exchangeGcsAssertion } from "./gcs-jwt.ts";
+import { blockedTarget } from "./ssrf.ts";
 import type { ECMProvider, PutInput, StorageError, StorageOutcome } from "./types.ts";
 
 function fail(message: string, code: string, status?: number): StorageError {
@@ -78,17 +80,34 @@ export async function putAzure(config: AzureConfig, input: PutInput): Promise<St
 
 export interface GcsConfig {
   bucket: string;
-  accessToken: string;
+  accessToken?: string;
+  clientEmail?: string;
+  privateKey?: string;
   prefix?: string;
 }
 
+async function resolveGcsToken(config: GcsConfig): Promise<{ ok: true; token: string } | StorageError> {
+  if (config.accessToken) return { ok: true, token: config.accessToken };
+  if (!config.clientEmail || !config.privateKey) return missing("GCS needs a bearer token or a service-account email and private key");
+  try {
+    const assertion = await mintGcsAssertion(config.clientEmail, config.privateKey);
+    const exchanged = await exchangeGcsAssertion(assertion);
+    if (!exchanged.ok) return fail(exchanged.message, "GCS_AUTH", exchanged.status);
+    return { ok: true, token: exchanged.token };
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "Could not mint a GCS assertion", "GCS_AUTH");
+  }
+}
+
 export async function putGcs(config: GcsConfig, input: PutInput): Promise<StorageOutcome> {
-  if (!config.bucket || !config.accessToken) return missing("GCS bucket and access token are required. Service-account JWT minting is not implemented; paste a bearer token.");
+  if (!config.bucket) return missing("GCS bucket is required");
+  const token = await resolveGcsToken(config);
+  if (!token.ok) return token;
   const name = `${config.prefix ?? ""}${input.key}`.replace(/^\/+/, "");
   const url = `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(config.bucket)}/o?uploadType=media&name=${encodeURIComponent(name)}`;
   const response = await fetchRetry(url, {
     method: "POST",
-    headers: { authorization: `Bearer ${config.accessToken}`, "content-type": input.contentType },
+    headers: { authorization: `Bearer ${token.token}`, "content-type": input.contentType },
     body: input.body as BufferSource,
   });
   if (!response.ok) return fail(await bodyText(response), "GCS_PUT_FAILED", response.status);
@@ -96,8 +115,37 @@ export async function putGcs(config: GcsConfig, input: PutInput): Promise<Storag
   return { ok: true, key: name, bytes: input.body.byteLength, sha256: await sha256Hex(input.body), externalId: json.id, url: json.mediaLink, requestId: requestId() };
 }
 
+export async function getGcs(config: GcsConfig, key: string): Promise<{ ok: true; body: Uint8Array } | StorageError> {
+  const token = await resolveGcsToken(config);
+  if (!token.ok) return token;
+  const name = `${config.prefix ?? ""}${key}`.replace(/^\/+/, "");
+  const response = await fetchRetry(`https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(config.bucket)}/o/${encodeURIComponent(name)}?alt=media`, {
+    headers: { authorization: `Bearer ${token.token}` },
+  });
+  if (!response.ok) return fail(await bodyText(response), "GCS_GET_FAILED", response.status);
+  return { ok: true, body: new Uint8Array(await response.arrayBuffer()) };
+}
+
+export async function deleteGcs(config: GcsConfig, key: string): Promise<{ ok: true } | StorageError> {
+  const token = await resolveGcsToken(config);
+  if (!token.ok) return token;
+  const name = `${config.prefix ?? ""}${key}`.replace(/^\/+/, "");
+  const response = await fetchRetry(`https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(config.bucket)}/o/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${token.token}` },
+  });
+  if (!response.ok && response.status !== 404) return fail(await bodyText(response), "GCS_DELETE_FAILED", response.status);
+  return { ok: true };
+}
+
 export async function testGcs(config: GcsConfig) {
-  return putGcs(config, { key: "meridian-healthcheck.txt", body: new TextEncoder().encode("meridian"), contentType: "text/plain" });
+  const put = await putGcs(config, { key: "meridian-healthcheck.txt", body: new TextEncoder().encode("meridian"), contentType: "text/plain" });
+  if (!put.ok) return put;
+  const got = await getGcs(config, "meridian-healthcheck.txt");
+  if (!got.ok) return got;
+  const removed = await deleteGcs(config, "meridian-healthcheck.txt");
+  if (!removed.ok) return removed;
+  return { ok: true as const, message: "GCS put, get, and delete succeeded", requestId: put.requestId ?? requestId() };
 }
 
 export interface SharePointConfig {
@@ -299,10 +347,13 @@ export interface RestConfig {
   endpoint: string;
   bearer?: string;
   prefix?: string;
+  allowPrivate?: boolean;
 }
 
 export async function putRest(config: RestConfig, input: PutInput): Promise<StorageOutcome> {
   if (!config.endpoint) return missing("REST ECM endpoint is required");
+  const blocked = blockedTarget(config.endpoint, config.allowPrivate === true);
+  if (blocked) return missing(blocked, "SSRF_BLOCKED");
   const url = `${config.endpoint.replace(/\/$/, "")}/${`${config.prefix ?? ""}${input.key}`.replace(/^\/+/, "")}`;
   const headers: Record<string, string> = { "content-type": input.contentType };
   if (config.bearer) headers.authorization = `Bearer ${config.bearer}`;

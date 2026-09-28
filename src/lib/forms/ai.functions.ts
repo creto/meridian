@@ -6,7 +6,7 @@ import {
   AGENT_SYSTEM,
   compactComponents,
   CREATE_SYSTEM,
-  EDIT_SYSTEM,
+  editSystemPrompt,
   extractJson,
   formFromModel,
   localAgent,
@@ -147,7 +147,7 @@ export const editFormWithModel = createServerFn({ method: "POST" })
       ? `Conversation:\n${data.history.map((item) => `${item.role}: ${item.content}`).join("\n\n")}\n\n`
       : "";
     const grok = await grokJson(
-      EDIT_SYSTEM,
+      editSystemPrompt(),
       `${prior}Instruction:\n${data.instruction}\n\nCurrent form:\n${JSON.stringify({
         title: data.form.title,
         description: data.form.description,

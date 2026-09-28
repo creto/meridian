@@ -168,6 +168,16 @@ function jsonSchemaFor(component: FormComponent): Record<string, unknown> {
           country: { type: "string", title: "Country" },
         },
       });
+    case "captcha":
+      return annotate(component, {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          passed: { type: "boolean" },
+        },
+        required: ["id", "passed"],
+        additionalProperties: false,
+      });
     case "datagrid":
       return annotate(component, {
         type: "array",
@@ -365,6 +375,13 @@ const REGISTRY: Record<ComponentType, ComponentDescriptor> = {
     "Address",
     ["address"],
     "Postal address stored as street, city, region, postal code, and country.",
+  ),
+  captcha: define(
+    "captcha",
+    "advanced",
+    "Captcha",
+    ["recaptcha"],
+    "Character challenge checked before submit. The typed code is not stored.",
   ),
   button: define(
     "button",

@@ -33,12 +33,13 @@ const ADAPTERS: [string, ComponentType][] = [
   ["button", "button"],
   ["hidden", "hidden"],
   ["survey", "radio"],
+  ["recaptcha", "captcha"],
 ];
 
 test("registry covers every component type and refuses schema gaps", () => {
   const entries = allRegistryEntries();
-  assert.equal(entries.length, 31);
-  assert.equal(new Set(entries.map((entry) => entry.type)).size, 31);
+  assert.equal(entries.length, 32);
+  assert.equal(new Set(entries.map((entry) => entry.type)).size, 32);
   for (const entry of entries) {
     assert.equal(registryEntry(entry.type), entry);
     assert.equal(entry.defaultRequired, false);
@@ -64,6 +65,7 @@ test("registry covers every component type and refuses schema gaps", () => {
   assert.ok(registryEntry("datagrid").formioTypes.includes("editgrid"));
   assert.ok(registryEntry("date").formioTypes.includes("day"));
   assert.ok(registryEntry("content").formioTypes.includes("htmlelement"));
+  assert.ok(registryEntry("captcha").formioTypes.includes("recaptcha"));
 
   const selectSchema = registryEntry("select").jsonSchema({
     id: "s",

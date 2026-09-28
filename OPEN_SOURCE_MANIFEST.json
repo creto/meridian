@@ -1,0 +1,13 @@
+{
+  "dependencies": [
+    {
+      "name": "@formio/js",
+      "version": "5.2.4",
+      "license": "MIT",
+      "repository": "https://github.com/formio/formio.js",
+      "integrity": "sha512-mQfZ/Vd5cVpCCLnPhZVXTA99F1Jq86W1VU+bx17m95YYQXwyajhXUijtki5be3Xk9DH5spYxajB4Q4XVy5Udzw==",
+      "usage": "Component registry, default schemas, and edit-form definitions for the Meridian builder.",
+      "localChanges": "No fork. Edit forms are extracted to src/lib/forms/formio/inventory.generated.json. The native renderer does not execute upstream JavaScript."
+    }
+  ]
+}

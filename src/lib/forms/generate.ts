@@ -1,4 +1,5 @@
 import { createComponent } from "./catalog.ts";
+import { knownProperty, writeSetting } from "./formio/document.ts";
 import { uid, uniqueKey } from "./ids.ts";
 import { newFormShell } from "./importing.ts";
 import type { FormComponent, FormDefinition, WorkflowDef } from "./types.ts";
@@ -259,7 +260,7 @@ export function normalizeAiComponents(raw: unknown): FormComponent[] {
     const type = String(src.type ?? "textfield") as FormComponent["type"];
     const allowed = new Set(createComponent("textfield", "x").type ? [] : []);
     void allowed;
-    const known: FormComponent["type"][] = ["textfield", "textarea", "number", "password", "email", "phone", "url", "hidden", "select", "radio", "checkbox", "selectboxes", "toggle", "datetime", "date", "time", "currency", "slider", "rating", "content", "panel", "columns", "fieldset", "tabs", "datagrid", "container", "file", "signature", "address", "button", "review"];
+    const known: FormComponent["type"][] = ["textfield", "textarea", "number", "password", "email", "phone", "url", "hidden", "select", "radio", "checkbox", "selectboxes", "toggle", "datetime", "date", "time", "currency", "slider", "rating", "content", "panel", "columns", "fieldset", "tabs", "datagrid", "container", "file", "signature", "address", "captcha", "button", "review"];
     const safeType = known.includes(type) ? type : "textfield";
     const label = String(src.label ?? safeType);
     const key = uniqueKey(String(src.key ?? label), taken);
@@ -296,10 +297,18 @@ export function normalizeAiComponents(raw: unknown): FormComponent[] {
     }
     if (typeof src.semantic === "string") component.semantic = src.semantic.slice(0, 40);
     if (typeof src.currency === "string") component.currency = src.currency.slice(0, 8);
-    if (Array.isArray(src.components)) {
-      component.components = src.components.map((child) => convert(child, depth + 1)).filter((c): c is FormComponent => !!c).slice(0, 40);
+    const extra = src.formio && typeof src.formio === "object" && !Array.isArray(src.formio) ? src.formio as Record<string, unknown> : {};
+    let patched = component;
+    for (const [path, value] of Object.entries(extra)) {
+      if (path === "type" || knownProperty(patched, path)) patched = writeSetting(patched, path, value);
     }
-    return component;
+    for (const path of ["inputMask", "prefix", "suffix", "tooltip", "placeholder", "description", "clearOnHide", "multiple"]) {
+      if (path in src && knownProperty(patched, path)) patched = writeSetting(patched, path, src[path]);
+    }
+    if (Array.isArray(src.components)) {
+      patched.components = src.components.map((child) => convert(child, depth + 1)).filter((c): c is FormComponent => !!c).slice(0, 40);
+    }
+    return patched;
   };
   return list.map((node) => convert(node, 0)).filter((c): c is FormComponent => !!c).slice(0, 80);
 }

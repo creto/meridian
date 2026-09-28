@@ -1,4 +1,7 @@
 import { asNumber, evalBool, evaluate, isEmpty, referencedKeys } from "./expressions.ts";
+import { checkCaptcha, readCaptcha } from "./captcha.ts";
+import { applyJsonLogic } from "./formio/json-logic.ts";
+import { fileNameAllowed, parseByteLimit, wordCount } from "./formio/coerce.ts";
 import { isLayout, walkComponents } from "./tree.ts";
 import type { FormComponent, FormDefinition } from "./types.ts";
 
@@ -10,8 +13,58 @@ export function scopeFor(data: Record<string, unknown>, extra: Record<string, un
 
 export function isVisible(component: FormComponent, data: Record<string, unknown>): boolean {
   if (component.hidden) return false;
+  const conditional = component.formio?.conditional;
+  if (conditional && typeof conditional === "object" && !Array.isArray(conditional)) {
+    const json = (conditional as { json?: unknown }).json;
+    if (json && typeof json === "object") {
+      try {
+        return !!applyJsonLogic(json, { data, row: data });
+      } catch {
+        return true;
+      }
+    }
+  }
   if (!component.conditional) return true;
   return evalBool(component.conditional, scopeFor(data), true);
+}
+
+export function clearsOnHide(component: FormComponent): boolean {
+  if (!component.formio) return false;
+  return component.formio.clearOnHide !== false;
+}
+
+export function applyClearOnHide(components: FormComponent[], data: Record<string, unknown>): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...data };
+  const visit = (list: FormComponent[], target: Record<string, unknown>, parentVisible: boolean) => {
+    for (const component of list) {
+      const visible = parentVisible && isVisible(component, next);
+      const structural = component.type === "panel" || component.type === "fieldset" || component.type === "tabs" || component.type === "columns" || component.type === "content" || component.type === "button" || component.type === "review";
+      if (!visible && clearsOnHide(component) && component.key && !structural && component.type !== "container" && component.type !== "datagrid") {
+        target[component.key] = emptyValue(component);
+      }
+      if (component.type === "datagrid") {
+        if (!visible && clearsOnHide(component)) target[component.key] = [];
+        else if (Array.isArray(target[component.key])) {
+          target[component.key] = (target[component.key] as Record<string, unknown>[]).map((row) => {
+            const copy = { ...row };
+            visit(component.components ?? [], copy, visible);
+            return copy;
+          });
+        }
+        continue;
+      }
+      if (component.type === "container") {
+        const obj = target[component.key] && typeof target[component.key] === "object" ? { ...(target[component.key] as Record<string, unknown>) } : {};
+        visit(component.components ?? [], obj, visible);
+        target[component.key] = obj;
+        continue;
+      }
+      if (component.type === "columns") component.columns?.forEach((col) => visit(col.components, target, visible));
+      else if (component.components) visit(component.components, target, visible);
+    }
+  };
+  visit(components, next, true);
+  return next;
 }
 
 function childLists(component: FormComponent): FormComponent[][] {
@@ -174,6 +227,17 @@ function patternOk(pattern: string, value: string): boolean {
 function validateField(component: FormComponent, value: unknown, data: Record<string, unknown>, path: string, errors: ErrorMap) {
   if (!isVisible(component, data) || component.disabled) return;
   const label = component.label || component.key;
+  if (component.type === "captcha") {
+    if (component.required === false && (value == null || value === "")) return;
+    const parsed = readCaptcha(value);
+    if (!parsed || !parsed.answer.trim()) {
+      errors[path] = "Complete the captcha";
+      return;
+    }
+    const verdict = checkCaptcha(parsed.id, parsed.answer);
+    if (!verdict.ok) errors[path] = verdict.message;
+    return;
+  }
   if (component.type === "checkbox" || component.type === "toggle") {
     if (component.required && value !== true) errors[path] = `${label} is required`;
     return;
@@ -208,7 +272,16 @@ function validateField(component: FormComponent, value: unknown, data: Record<st
   if (spec?.min != null && num != null && num < spec.min) errors[path] = `${label} must be at least ${spec.min}`;
   if (spec?.max != null && num != null && num > spec.max) errors[path] = `${label} must be at most ${spec.max}`;
   if (spec?.pattern && typeof value === "string" && !patternOk(spec.pattern, value)) {
-    errors[path] = spec.patternMessage || `${label} is not in the expected format`;
+    const errorLabel = typeof component.formio?.errorLabel === "string" ? component.formio.errorLabel : "";
+    errors[path] = spec.patternMessage || errorLabel || `${label} is not in the expected format`;
+  }
+  if (typeof value === "string") {
+    const formioValidate = component.formio?.validate;
+    const formioWords = formioValidate && typeof formioValidate === "object" ? formioValidate as { minWords?: unknown; maxWords?: unknown } : {};
+    const minWords = spec?.minWords ?? (typeof formioWords.minWords === "number" ? formioWords.minWords : undefined);
+    const maxWords = spec?.maxWords ?? (typeof formioWords.maxWords === "number" ? formioWords.maxWords : undefined);
+    if (minWords != null && wordCount(value) < minWords) errors[path] = `${label} must be at least ${minWords} words`;
+    if (maxWords != null && wordCount(value) > maxWords) errors[path] = `${label} must be at most ${maxWords} words`;
   }
   if (spec?.custom) {
     const result = evaluate(spec.custom, scopeFor(data, { value }));
@@ -220,8 +293,13 @@ function validateField(component: FormComponent, value: unknown, data: Record<st
     if (component.required && isEmpty(addr.line1)) errors[path] = `${label} needs a street`;
   }
   if (component.type === "file" && value && typeof value === "object") {
-    const file = value as { size?: number };
-    if (spec?.max != null && (file.size ?? 0) > spec.max) errors[path] = `${label} exceeds the size limit`;
+    const file = value as { size?: number; name?: string };
+    const maxBytes = spec?.max ?? parseByteLimit(component.formio?.fileMaxSize);
+    const minBytes = parseByteLimit(component.formio?.fileMinSize);
+    if (maxBytes != null && (file.size ?? 0) > maxBytes) errors[path] = `${label} exceeds the size limit`;
+    if (minBytes != null && (file.size ?? 0) < minBytes) errors[path] = `${label} is smaller than the minimum size`;
+    const pattern = typeof component.formio?.filePattern === "string" ? component.formio.filePattern : "";
+    if (pattern && file.name && !fileNameAllowed(pattern, file.name)) errors[path] = `${label} is not an allowed file type`;
   }
 }
 
@@ -299,6 +377,8 @@ export function emptyValue(component: FormComponent): unknown {
       return [] as Record<string, unknown>[];
     case "address":
       return { line1: "", city: "", region: "", postalCode: "", country: "" };
+    case "captcha":
+      return null;
     case "container":
       return {};
     case "number":

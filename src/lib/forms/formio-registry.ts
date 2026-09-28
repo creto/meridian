@@ -1,4 +1,5 @@
 import { createComponent } from "./catalog.ts";
+import { rememberFormio } from "./formio/document.ts";
 import { slugKey, uid } from "./ids.ts";
 import type { ComponentType, FormComponent, ValidateSpec } from "./types.ts";
 
@@ -45,6 +46,7 @@ const TARGETS: Record<string, ComponentType> = {
   button: "button",
   hidden: "hidden",
   survey: "radio",
+  recaptcha: "captcha",
 };
 
 const CHOICE_TYPES = new Set<ComponentType>(["select", "radio", "selectboxes"]);
@@ -296,6 +298,7 @@ function importKnown(
   if (legacy.length > 0) {
     component.legacyNote = `Legacy JavaScript logic was not imported. ${legacy.join(" | ")}`;
   }
+  rememberFormio(component, node);
 
   return { component, support, warnings };
 }
@@ -331,6 +334,7 @@ function importUnknown(node: Record<string, unknown>): FormioImportNode {
 
   const droppedNote = dropped.length > 0 ? ` Dropped properties: ${dropped.join(", ")}.` : "";
   component.legacyNote = `Unsupported Form.io type “${sourceType}” was kept as text for review.${droppedNote}`;
+  rememberFormio(component, node);
   return { component, support: "UNSUPPORTED", warnings };
 }
 

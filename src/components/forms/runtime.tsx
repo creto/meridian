@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Input, Textarea } from "@/components/ui/primitives";
-import { applyCalculations, initialData, isVisible, pageComponents, validateForm, validatePage } from "@/lib/forms/engine";
+import { applyCalculations, applyClearOnHide, initialData, isVisible, pageComponents, validateForm, validatePage } from "@/lib/forms/engine";
+import { issueCaptcha, readCaptcha, type CaptchaChallenge } from "@/lib/forms/captcha";
+import { publicSubmission, readPath, readSetting } from "@/lib/forms/formio/document";
+import { upstreamType } from "@/lib/forms/formio/adapter";
+import { applyCase, applyInputMask, collapseSpaces, sanitizeHtml, wordCount } from "@/lib/forms/formio/coerce";
 import { formatValue } from "@/lib/forms/pdf";
 import type { FormComponent, FormDefinition } from "@/lib/forms/types";
 import { cn } from "@/lib/cn";
@@ -32,6 +36,10 @@ function reviewRows(components: FormComponent[], data: Record<string, unknown>, 
     for (const component of list) {
       if (!isVisible(component, root)) continue;
       if (component.type === "review" || component.type === "content" || component.type === "button") continue;
+      if (component.type === "captcha") {
+        rows.push({ label: component.label || "Captcha", value: "Checked when you submit" });
+        continue;
+      }
       if (component.type === "panel" || component.type === "fieldset" || component.type === "tabs") {
         walk(component.components ?? []);
         continue;
@@ -48,13 +56,162 @@ function reviewRows(components: FormComponent[], data: Record<string, unknown>, 
   return rows;
 }
 
-function FieldShell({ label, required, hint, error, children }: { label: string; required?: boolean; hint?: string; error?: string; children: React.ReactNode }) {
+function FieldShell({ component, value, error, children }: { component: FormComponent; value?: unknown; error?: string; children: React.ReactNode }) {
+  const hideLabel = readSetting(component, "hideLabel") === true;
+  const position = String(readSetting(component, "labelPosition") ?? "top");
+  const tooltip = typeof readSetting(component, "tooltip") === "string" ? String(readSetting(component, "tooltip")) : "";
+  const customClass = typeof readSetting(component, "customClass") === "string" ? String(readSetting(component, "customClass")) : "";
+  const prefix = typeof readSetting(component, "prefix") === "string" ? String(readSetting(component, "prefix")) : "";
+  const suffix = typeof readSetting(component, "suffix") === "string" ? String(readSetting(component, "suffix")) : "";
+  const showChars = readSetting(component, "showCharCount") === true;
+  const showWords = readSetting(component, "showWordCount") === true;
+  const text = value == null ? "" : String(value);
+  const horizontal = position === "left" || position === "right";
   return (
-    <div className="grid gap-1 text-sm">
-      <span className="font-medium">{label}{required ? <span className="text-danger"> *</span> : null}</span>
-      {children}
-      {hint ? <span className="text-xs text-muted">{hint}</span> : null}
+    <div className={cn("grid gap-1 text-sm", horizontal && "sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-start", customClass)}>
+      {hideLabel ? null : (
+        <span className={cn("font-medium", position === "bottom" && "order-2")} title={tooltip || undefined}>
+          {component.label}{component.required ? <span className="text-danger"> *</span> : null}
+        </span>
+      )}
+      <div className="flex min-w-0 items-center gap-2">
+        {prefix ? <span className="text-xs text-muted">{prefix}</span> : null}
+        <div className="min-w-0 flex-1">{children}</div>
+        {suffix ? <span className="text-xs text-muted">{suffix}</span> : null}
+      </div>
+      {component.description ? <span className="text-xs text-muted">{component.description}</span> : null}
+      {showChars || showWords ? <span className="text-xs text-muted">{showWords ? `${wordCount(text)} words` : ""}{showWords && showChars ? " · " : ""}{showChars ? `${text.length} characters` : ""}</span> : null}
       {error ? <span className="text-xs text-danger" role="alert">{error}</span> : null}
+    </div>
+  );
+}
+
+function normalizeText(component: FormComponent, value: string): string {
+  let next = value;
+  const mask = readSetting(component, "inputMask");
+  if (typeof mask === "string" && mask) next = applyInputMask(mask, next);
+  next = collapseSpaces(readSetting(component, "truncateMultipleSpaces"), next);
+  return applyCase(readSetting(component, "case"), next);
+}
+
+function optionList(body: unknown, selectValues: string): { label: string; value: string }[] {
+  const located = selectValues ? readPath(body, selectValues) : body;
+  const list = Array.isArray(located) ? located : [];
+  return list.slice(0, 200).map((item) => {
+    if (item == null || typeof item !== "object") return { label: String(item), value: String(item) };
+    const record = item as { label?: unknown; value?: unknown };
+    const value = record.value == null ? String(record.label ?? "") : String(record.value);
+    return { label: String(record.label ?? value), value };
+  }).filter((item) => item.value);
+}
+
+function ChoiceSelect({
+  component,
+  value,
+  disabled,
+  error,
+  onChange,
+}: {
+  component: FormComponent;
+  value: unknown;
+  disabled?: boolean;
+  error?: string;
+  onChange: (value: unknown) => void;
+}) {
+  const src = String(readSetting(component, "dataSrc") ?? "values");
+  const url = typeof readSetting(component, "data.url") === "string" ? String(readSetting(component, "data.url")) : "";
+  const jsonText = typeof readSetting(component, "data.json") === "string" ? String(readSetting(component, "data.json")) : "";
+  const selectValues = typeof readSetting(component, "selectValues") === "string" ? String(readSetting(component, "selectValues")) : "";
+  const [remote, setRemote] = useState<{ label: string; value: string }[] | null>(null);
+  useEffect(() => {
+    if (src === "json" && jsonText.trim()) {
+      try {
+        setRemote(optionList(JSON.parse(jsonText), selectValues));
+      } catch {
+        setRemote([]);
+      }
+      return;
+    }
+    if (src !== "url" || !/^https?:\/\//i.test(url)) {
+      setRemote(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(url, { signal: controller.signal })
+      .then((response) => response.json())
+      .then((body) => setRemote(optionList(body, selectValues)))
+      .catch(() => setRemote(null));
+    return () => controller.abort();
+  }, [src, url, jsonText, selectValues]);
+  const options = remote ?? component.values ?? [];
+  const multiple = readSetting(component, "multiple") === true;
+  if (multiple) {
+    const selected = Array.isArray(value) ? value.map(String) : [];
+    return (
+      <select multiple className={cn("min-h-28 w-full rounded-md border bg-elevated px-3 py-2 text-sm", error ? "border-danger" : "border-line")} value={selected} disabled={disabled} aria-label={component.label} onChange={(event) => onChange([...event.target.selectedOptions].map((option) => option.value))}>
+        {options.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      </select>
+    );
+  }
+  return (
+    <select className={cn("h-11 w-full rounded-md border bg-elevated px-3 text-sm", error ? "border-danger" : "border-line")} value={String(value ?? "")} disabled={disabled} aria-label={component.label} aria-invalid={error ? true : undefined} onChange={(event) => onChange(event.target.value)}>
+      <option value="">Select</option>
+      {options.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+    </select>
+  );
+}
+
+function CaptchaControl({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: unknown;
+  disabled?: boolean;
+  onChange: (value: unknown) => void;
+}) {
+  const parsed = readCaptcha(value);
+  const [challenge, setChallenge] = useState<CaptchaChallenge | null>(null);
+  const refresh = () => {
+    const next = issueCaptcha();
+    setChallenge(next);
+    onChange({ id: next.id, answer: "" });
+  };
+  useEffect(() => {
+    if (challenge) return;
+    const next = issueCaptcha();
+    setChallenge(next);
+    onChange({ id: next.id, answer: "" });
+  }, [challenge, onChange]);
+  const shown = challenge;
+  return (
+    <div className="grid gap-2">
+      {shown ? (
+        <svg viewBox={`0 0 ${shown.width} ${shown.height}`} className="h-16 w-full max-w-xs rounded-md border border-line bg-paper text-paper-fg" role="img" aria-label="Captcha characters">
+          {shown.lines.map((line, index) => (
+            <line key={index} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} stroke="currentColor" strokeOpacity="0.35" />
+          ))}
+          {shown.glyphs.map((glyph, index) => (
+            <text key={index} x={glyph.x} y={glyph.y} fontSize="28" fontFamily="ui-monospace, monospace" transform={`rotate(${glyph.rotate} ${glyph.x} ${glyph.y})`}>
+              {glyph.text}
+            </text>
+          ))}
+        </svg>
+      ) : null}
+      <div className="flex gap-2">
+        <Input
+          value={parsed?.answer ?? ""}
+          disabled={disabled}
+          autoComplete="off"
+          spellCheck={false}
+          aria-label="Captcha characters"
+          placeholder="Characters"
+          onChange={(event) => onChange({ id: shown?.id ?? parsed?.id ?? "", answer: event.target.value })}
+        />
+        <button type="button" className="h-10 shrink-0 rounded-md border border-line px-3 text-sm" disabled={disabled} onClick={refresh}>
+          New code
+        </button>
+      </div>
     </div>
   );
 }
@@ -73,16 +230,63 @@ function FieldInput({
   onChange: (value: unknown) => void;
 }) {
   const common = { disabled, "aria-invalid": error ? true : undefined, "aria-label": component.label };
+  const kind = upstreamType(component);
+  if (component.type === "captcha" || kind === "recaptcha") {
+    return <CaptchaControl value={value} disabled={disabled} onChange={onChange} />;
+  }
+  if (kind === "survey") {
+    const questions = Array.isArray(readSetting(component, "questions")) ? readSetting(component, "questions") as { label?: string; value?: string }[] : [];
+    const answers = value && typeof value === "object" ? value as Record<string, string> : {};
+    return (
+      <div className="grid gap-2">
+        {questions.map((question) => {
+          const key = String(question.value ?? question.label ?? "");
+          return (
+            <div key={key} className="grid gap-1">
+              <span className="text-sm">{question.label}</span>
+              <div className="flex flex-wrap gap-3">
+                {(component.values ?? []).map((opt) => (
+                  <label key={opt.value} className="flex items-center gap-2 text-sm">
+                    <input type="radio" name={`${component.id}-${key}`} checked={answers[key] === opt.value} disabled={disabled} onChange={() => onChange({ ...answers, [key]: opt.value })} />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  if (kind === "day") {
+    const day = value && typeof value === "object" ? value as Record<string, string> : {};
+    const set = (key: string, next: string) => onChange({ ...day, [key]: next });
+    return (
+      <div className="grid grid-cols-3 gap-2">
+        <Input value={day.month ?? ""} placeholder="MM" aria-label="Month" disabled={disabled} onChange={(event) => set("month", event.target.value)} />
+        <Input value={day.day ?? ""} placeholder="DD" aria-label="Day" disabled={disabled} onChange={(event) => set("day", event.target.value)} />
+        <Input value={day.year ?? ""} placeholder="YYYY" aria-label="Year" disabled={disabled} onChange={(event) => set("year", event.target.value)} />
+      </div>
+    );
+  }
+  if (kind === "tags") {
+    const tags = Array.isArray(value) ? value.map(String) : typeof value === "string" && value ? value.split(",").map((item) => item.trim()).filter(Boolean) : [];
+    return (
+      <Input
+        value={tags.join(", ")}
+        disabled={disabled}
+        placeholder={component.placeholder || "tag, tag"}
+        aria-label={component.label}
+        onChange={(event) => onChange(event.target.value.split(",").map((item) => item.trim()).filter(Boolean))}
+      />
+    );
+  }
   if (component.type === "textarea") {
-    return <Textarea {...common} value={String(value ?? "")} placeholder={component.placeholder} onChange={(e) => onChange(e.target.value)} />;
+    const rows = Number(readSetting(component, "rows") ?? 3);
+    return <Textarea {...common} rows={Number.isFinite(rows) ? rows : 3} value={String(value ?? "")} placeholder={component.placeholder} spellCheck={readSetting(component, "spellcheck") !== false} onChange={(e) => onChange(normalizeText(component, e.target.value))} />;
   }
   if (component.type === "select") {
-    return (
-      <select className={cn("h-11 w-full rounded-md border bg-elevated px-3 text-sm", error ? "border-danger" : "border-line")} value={String(value ?? "")} disabled={disabled} aria-label={component.label} aria-invalid={error ? true : undefined} onChange={(e) => onChange(e.target.value)}>
-        <option value="">Select</option>
-        {(component.values ?? []).map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-      </select>
-    );
+    return <ChoiceSelect component={component} value={value} disabled={disabled} error={error} onChange={onChange} />;
   }
   if (component.type === "radio") {
     return (
@@ -143,6 +347,8 @@ function FieldInput({
           type="file"
           disabled={disabled}
           aria-label={component.label}
+          accept={typeof readSetting(component, "filePattern") === "string" ? String(readSetting(component, "filePattern")) : undefined}
+          multiple={readSetting(component, "multiple") === true}
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (!file) {
@@ -203,9 +409,13 @@ function FieldInput({
       min={component.min ?? component.validate?.min}
       max={component.max ?? component.validate?.max}
       step={component.step}
+      spellCheck={readSetting(component, "spellcheck") !== false}
+      autoComplete={typeof readSetting(component, "autocomplete") === "string" ? String(readSetting(component, "autocomplete")) : undefined}
+      autoFocus={readSetting(component, "autofocus") === true}
+      tabIndex={typeof readSetting(component, "tabindex") === "number" ? readSetting(component, "tabindex") as number : undefined}
       onChange={(e) => {
         if (type === "number") onChange(e.target.value === "" ? "" : Number(e.target.value));
-        else onChange(e.target.value);
+        else onChange(normalizeText(component, e.target.value));
       }}
     />
   );
@@ -338,7 +548,11 @@ function Fields({
     <div className="grid gap-4">
       {components.map((component) => {
         if (component.type === "hidden" || !isVisible(component, root)) return null;
-        if (component.type === "content") {
+        if (component.type === "content" || upstreamType(component) === "htmlelement") {
+          const html = typeof readSetting(component, "content") === "string" ? String(readSetting(component, "content")) : typeof readSetting(component, "html") === "string" ? String(readSetting(component, "html")) : "";
+          if (html && upstreamType(component) === "htmlelement") {
+            return <div key={component.id} className="text-sm text-muted" dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }} />;
+          }
           return (
             <p key={component.id} className={cn("text-sm text-muted", component.variant === "alert" && "rounded-lg border border-line bg-paper px-3 py-2", component.variant === "heading" && "text-lg font-semibold text-paper-fg")}>
               {component.description || component.label}
@@ -412,7 +626,7 @@ function Fields({
           );
         }
         return (
-          <FieldShell key={component.id} label={component.label} required={component.required} hint={component.description} error={errors[component.key]}>
+          <FieldShell key={component.id} component={component} value={data[component.key]} error={errors[component.key]}>
             <FieldInput
               component={component}
               value={data[component.key]}
@@ -477,13 +691,13 @@ export function FormRuntime({ form, frame = "full", initial, onSubmit, onDraft }
   }, [safePage]);
 
   const commit = (next: Record<string, unknown>) => {
-    setData(applyCalculations(form.components, next));
+    setData(applyClearOnHide(form.components, applyCalculations(form.components, next)));
     setErrors({});
     setMessage("");
   };
 
   const submit = async () => {
-    const computed = applyCalculations(form.components, data);
+    const computed = applyClearOnHide(form.components, applyCalculations(form.components, data));
     const found = validateForm(form, computed);
     setErrors(found);
     if (Object.keys(found).length) {
@@ -493,7 +707,7 @@ export function FormRuntime({ form, frame = "full", initial, onSubmit, onDraft }
     }
     setBusy(true);
     try {
-      const result = await onSubmit(computed);
+      const result = await onSubmit(publicSubmission(form.components, computed));
       if (result.errors && Object.keys(result.errors).length) {
         setErrors(result.errors);
         setMessage(result.message || errorSummary(result.errors));

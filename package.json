@@ -17,11 +17,15 @@
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
     "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts",
+    "formio:inventory": "node tools/formio-audit/extract-component-settings.mjs && node --experimental-strip-types tools/formio-audit/write-docs.ts",
+    "formio:parity": "node --test scripts/formio-parity.test.mjs",
+    "formio:parity:test": "node --experimental-strip-types --test src/lib/forms/formio/parity.test.ts src/lib/forms/formio-registry.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",
+    "@formio/js": "^5.2.4",
     "@hookform/resolvers": "^5.7.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",

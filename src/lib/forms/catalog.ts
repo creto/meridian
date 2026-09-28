@@ -1,8 +1,11 @@
+import { MERIDIAN_FORMIO_TYPE } from "./formio/adapter.ts";
 import { uid } from "./ids.ts";
 import type { ComponentType, FormComponent } from "./types.ts";
 
 export interface CatalogItem {
   type: ComponentType;
+  /** Upstream Form.io type when it differs from the Meridian renderer family. */
+  formioType?: string;
   label: string;
   group: "Basic" | "Choice" | "Dates" | "Numeric" | "Content" | "Layout" | "Data" | "Files" | "Advanced";
   description: string;
@@ -39,8 +42,18 @@ export const CATALOG: CatalogItem[] = [
   { type: "file", label: "File", group: "Files", description: "Upload", icon: "FileUp" },
   { type: "signature", label: "Signature", group: "Files", description: "Draw or type", icon: "PenLine" },
   { type: "address", label: "Address", group: "Advanced", description: "Postal address", icon: "MapPin" },
+  { type: "captcha", label: "Captcha", group: "Advanced", description: "Character check", icon: "Shield" },
   { type: "review", label: "Review", group: "Advanced", description: "Summary of answers", icon: "ClipboardCheck" },
   { type: "button", label: "Button", group: "Advanced", description: "Submit action", icon: "MousePointerClick" },
+  { type: "radio", formioType: "survey", label: "Survey", group: "Choice", description: "Questions by values", icon: "ListChecks" },
+  { type: "textfield", formioType: "tags", label: "Tags", group: "Advanced", description: "Free tags", icon: "Tags" },
+  { type: "panel", formioType: "well", label: "Well", group: "Layout", description: "Inset group", icon: "Square" },
+  { type: "datagrid", formioType: "datamap", label: "Data map", group: "Data", description: "Key and value rows", icon: "Braces" },
+  { type: "datagrid", formioType: "editgrid", label: "Edit grid", group: "Data", description: "Rows open to edit", icon: "Table" },
+  { type: "content", formioType: "htmlelement", label: "HTML", group: "Content", description: "Sanitized markup", icon: "Code" },
+  { type: "date", formioType: "day", label: "Day", group: "Dates", description: "Month, day, year", icon: "Calendar" },
+  { type: "container", formioType: "form", label: "Nested form", group: "Advanced", description: "Embedded fields", icon: "Folder" },
+  { type: "captcha", formioType: "recaptcha", label: "reCAPTCHA", group: "Advanced", description: "Uses the built-in check", icon: "Shield" },
 ];
 
 export const GROUPS = ["Basic", "Choice", "Dates", "Numeric", "Content", "Layout", "Data", "Files", "Advanced"] as const;
@@ -49,10 +62,11 @@ function base(type: ComponentType, key: string, label: string, id: string): Form
   return { id, type, key, label };
 }
 
-export function createComponent(type: ComponentType, key: string, id = uid("cmp")): FormComponent {
-  const item = CATALOG.find((entry) => entry.type === type);
+export function createComponent(type: ComponentType, key: string, id?: string, formioType?: string): FormComponent {
+  const resolvedId = id || uid("cmp");
+  const item = CATALOG.find((entry) => entry.type === type && entry.formioType === formioType) ?? CATALOG.find((entry) => entry.type === type);
   const label = item?.label ?? type;
-  const component = base(type, key, label, id);
+  const component = base(type, key, label, resolvedId);
   switch (type) {
     case "select":
     case "radio":
@@ -126,8 +140,32 @@ export function createComponent(type: ComponentType, key: string, id = uid("cmp"
       component.label = "Review";
       component.description = "Confirm the information before submitting.";
       break;
+    case "captcha":
+      component.label = "Captcha";
+      component.required = true;
+      component.description = "Type the characters shown. This is checked before the form is accepted.";
+      break;
     default:
       break;
+  }
+  const upstream = formioType ?? MERIDIAN_FORMIO_TYPE[type] ?? type;
+  component.formio = { type: upstream };
+  if (upstream === "survey") {
+    component.formio.questions = [{ label: "How was it?", value: "how" }];
+    component.values = component.values ?? [
+      { label: "Yes", value: "yes" },
+      { label: "No", value: "no" },
+    ];
+  }
+  if (upstream === "htmlelement") {
+    component.formio.tag = "p";
+    component.formio.content = component.description ?? "";
+  }
+  if (upstream === "recaptcha") {
+    component.label = "Captcha";
+    component.required = true;
+    component.description = "Type the characters shown. Google reCAPTCHA is not called; Meridian checks this code.";
+    component.formio = { ...component.formio, type: "recaptcha", captchaProvider: "meridian" };
   }
   return component;
 }

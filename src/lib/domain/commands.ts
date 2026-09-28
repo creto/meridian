@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { validateForm } from "../forms/engine.ts";
+import { settleCaptcha } from "../forms/captcha.ts";
 import { lintBlocksPublish, lintForm } from "../forms/lint.ts";
 import { startWorkflow } from "../forms/workflow-run.ts";
 import type { FormDefinition, Submission } from "../forms/types.ts";
@@ -152,6 +153,9 @@ export async function submitForm(
     const errors = validateForm(form, input.data);
     if (Object.keys(errors).length) return { ok: false, code: "FORM_VALIDATION_FAILED", message: "Submission contains invalid fields", errors };
   }
+  const settled = input.draft ? { ok: true as const, data: input.data } : settleCaptcha(form.components, input.data);
+  if (!settled.ok) return { ok: false, code: "FORM_VALIDATION_FAILED", message: "Submission contains invalid fields", errors: settled.errors };
+  const payload = settled.data;
   const versionRows = await db.query<{ version: number; schema: unknown; workflow: unknown }>(
     "select version, schema, workflow from form_versions where tenant_id = $1 and form_id = $2 order by version desc limit 1",
     [tenantId, form.id],
@@ -166,11 +170,11 @@ export async function submitForm(
   await db.query(
     `insert into submissions (id, tenant_id, workspace_id, form_id, form_name, form_version, status, data, workflow, documents, idempotency_key, created_at, updated_at)
      values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,'[]'::jsonb,$10,$11,$11)`,
-    [submissionId, tenantId, ws, form.id, form.name, formVersion, status, JSON.stringify(input.data), workflow ? JSON.stringify(workflow) : null, input.idempotencyKey ?? null, now],
+    [submissionId, tenantId, ws, form.id, form.name, formVersion, status, JSON.stringify(payload), workflow ? JSON.stringify(workflow) : null, input.idempotencyKey ?? null, now],
   );
   await db.query(
     `insert into submission_revisions (tenant_id, submission_id, seq, at, actor, note, data) values ($1,$2,1,$3,$4,$5,$6::jsonb)`,
-    [tenantId, submissionId, now, input.actor, input.draft ? "Draft" : "Submitted", JSON.stringify(input.data)],
+    [tenantId, submissionId, now, input.actor, input.draft ? "Draft" : "Submitted", JSON.stringify(payload)],
   );
   if (workflow) {
     await db.query(

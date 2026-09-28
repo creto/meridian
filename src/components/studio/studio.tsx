@@ -9,6 +9,7 @@ import { proposeEdit } from "@/lib/forms/assistant";
 import { editFormWithModel, type ChatTurn } from "@/lib/forms/ai.functions";
 import { proposalFromModel, type EditProposal } from "@/lib/forms/llm";
 import { CATALOG, createComponent, GROUPS } from "@/lib/forms/catalog";
+import { PropertyInspector } from "@/components/studio/property-inspector";
 import { semanticDiff } from "@/lib/forms/diff";
 import { lintForm } from "@/lib/forms/lint";
 import { toCapabilities, toJsonSchema, inputLabels } from "@/lib/forms/schema-export";
@@ -92,12 +93,12 @@ export function Studio({ formId }: { formId: string }) {
     updateForm(form.id, (current) => ({ ...current, ...patch }), message);
   }
 
-  function addType(type: ComponentType, parentId?: string | null) {
+  function addType(type: ComponentType, parentId?: string | null, formioType?: string) {
     if (!form) return;
     const taken = new Set(collectKeys(form.components));
-    const item = CATALOG.find((entry) => entry.type === type);
+    const item = CATALOG.find((entry) => entry.type === type && entry.formioType === formioType) ?? CATALOG.find((entry) => entry.type === type);
     const key = uniqueKey(item?.label ?? type, taken);
-    const component = createComponent(type, key);
+    const component = createComponent(type, key, undefined, formioType ?? item?.formioType);
     component.key = key;
     const parent = parentId ? findComponent(form.components, parentId)?.component : selected.length === 1 ? findComponent(form.components, selected[0]!)?.component : null;
     const container = parent && ["panel", "fieldset", "tabs", "container", "datagrid"].includes(parent.type) ? parent.id : null;
@@ -175,18 +176,18 @@ export function Studio({ formId }: { formId: string }) {
   }
 
   const selectedComponent = selected.length === 1 ? findComponent(form.components, selected[0]!)?.component ?? null : null;
-  const filtered = CATALOG.filter((item) => `${item.label} ${item.type} ${item.group}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const filtered = CATALOG.filter((item) => `${item.label} ${item.type} ${item.formioType ?? ""} ${item.group}`.toLowerCase().includes(query.trim().toLowerCase()));
 
   const onDrop = (event: DragEvent, parentId: string | null, column?: number) => {
     event.preventDefault();
     event.stopPropagation();
     const raw = event.dataTransfer.getData("application/x-meridian");
     if (!raw) return;
-    const payload = JSON.parse(raw) as { op: "new"; type: ComponentType } | { op: "move"; id: string };
+    const payload = JSON.parse(raw) as { op: "new"; type: ComponentType; formioType?: string } | { op: "move"; id: string };
     if (payload.op === "new") {
       const taken = new Set(collectKeys(form.components));
-      const key = uniqueKey(payload.type, taken);
-      const component = createComponent(payload.type, key);
+      const key = uniqueKey(payload.formioType ?? payload.type, taken);
+      const component = createComponent(payload.type, key, undefined, payload.formioType);
       component.key = key;
       const next = column != null && parentId
         ? insertIntoColumn(form.components, parentId, column, component, 999)
@@ -255,11 +256,11 @@ export function Studio({ formId }: { formId: string }) {
                     <div className="grid gap-1">
                       {items.map((item) => (
                         <button
-                          key={item.type}
+                          key={`${item.type}:${item.formioType ?? ""}`}
                           type="button"
                           draggable
-                          onDragStart={(event) => event.dataTransfer.setData("application/x-meridian", JSON.stringify({ op: "new", type: item.type }))}
-                          onClick={() => addType(item.type)}
+                          onDragStart={(event) => event.dataTransfer.setData("application/x-meridian", JSON.stringify({ op: "new", type: item.type, formioType: item.formioType }))}
+                          onClick={() => addType(item.type, null, item.formioType)}
                           className="flex h-11 items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-chrome-elev"
                         >
                           <Icon name={item.icon} />
@@ -829,6 +830,8 @@ function Inspector({
         <Button className="h-10" onClick={() => onBulk({ required: true })}>Make required</Button>
         <Button variant="secondary" className="h-10" onClick={() => onBulk({ required: false })}>Make optional</Button>
         <Button variant="secondary" className="h-10" onClick={() => onBulk({ hidden: true })}>Hide</Button>
+        <Button variant="secondary" className="h-10" onClick={() => onBulk({ disabled: true })}>Disable</Button>
+        <p className="text-xs text-chrome-muted">Shared settings apply only where every selected field already exists. Open one field for the full Form.io settings list.</p>
       </div>
     );
   }
@@ -893,53 +896,12 @@ function Inspector({
       </div>
     );
   }
-  const choice = component.type === "select" || component.type === "radio" || component.type === "selectboxes";
   return (
-    <div className="grid gap-3 p-4 text-sm">
-      <p className="text-xs text-chrome-muted">{component.type}</p>
-      <label className="grid gap-1">Label
-        <input className="h-10 rounded-md border border-chrome-line bg-chrome-elev px-2" value={component.label} onChange={(e) => onPatch({ label: e.target.value })} />
-      </label>
-      <label className="grid gap-1">Key
-        <input className="h-10 rounded-md border border-chrome-line bg-chrome-elev px-2 font-mono" value={component.key} onChange={(e) => onPatch({ key: e.target.value })} />
-      </label>
-      <label className="grid gap-1">Help
-        <input className="h-10 rounded-md border border-chrome-line bg-chrome-elev px-2" value={component.description ?? ""} onChange={(e) => onPatch({ description: e.target.value })} />
-      </label>
-      <label className="grid gap-1">Placeholder
-        <input className="h-10 rounded-md border border-chrome-line bg-chrome-elev px-2" value={component.placeholder ?? ""} onChange={(e) => onPatch({ placeholder: e.target.value })} />
-      </label>
-      <label className="flex items-center gap-2"><input type="checkbox" checked={!!component.required} onChange={(e) => onPatch({ required: e.target.checked })} /> Required</label>
-      <label className="flex items-center gap-2"><input type="checkbox" checked={!!component.hidden} onChange={(e) => onPatch({ hidden: e.target.checked })} /> Hidden</label>
-      <label className="grid gap-1">Show when
-        <input className="h-10 rounded-md border border-chrome-line bg-chrome-elev px-2 font-mono text-xs" value={component.conditional ?? ""} placeholder='country == "CO"' onChange={(e) => onPatch({ conditional: e.target.value })} />
-      </label>
-      <label className="grid gap-1">Calculate
-        <input className="h-10 rounded-md border border-chrome-line bg-chrome-elev px-2 font-mono text-xs" value={component.calculateValue ?? ""} placeholder="quantity * unitPrice" onChange={(e) => onPatch({ calculateValue: e.target.value })} />
-      </label>
-      <label className="grid gap-1">Pattern
-        <input className="h-10 rounded-md border border-chrome-line bg-chrome-elev px-2 font-mono text-xs" value={component.validate?.pattern ?? ""} onChange={(e) => onPatch({ validate: { ...(component.validate ?? {}), pattern: e.target.value } })} />
-      </label>
-      <label className="grid gap-1">Classification
-        <select className="h-10 rounded-md border border-chrome-line bg-chrome-elev px-2" value={component.classification ?? "PUBLIC"} onChange={(e) => onPatch({ classification: e.target.value as FormComponent["classification"] })}>
-          {["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"].map((item) => <option key={item}>{item}</option>)}
-        </select>
-      </label>
-      {choice ? (
-        <label className="grid gap-1">Options
-          <textarea
-            className="min-h-28 rounded-md border border-chrome-line bg-chrome-elev px-2 py-2 font-mono text-xs"
-            value={(component.values ?? []).map((opt) => `${opt.label}|${opt.value}`).join("\n")}
-            onChange={(e) => onPatch({
-              values: e.target.value.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
-                const [label, value] = line.split("|");
-                return { label: (label ?? "").trim(), value: (value ?? label ?? "").trim() };
-              }),
-            })}
-          />
-        </label>
-      ) : null}
-    </div>
+    <PropertyInspector
+      component={component}
+      siblings={form.components}
+      onChange={(next) => onPatch(next)}
+    />
   );
 }
 

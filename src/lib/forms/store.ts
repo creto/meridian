@@ -4,6 +4,7 @@ import { can, type WorkspaceRole } from "../platform/rbac.ts";
 import type { StorageConnection } from "../storage/types.ts";
 import { rememberConnections } from "../storage/connection-cache.ts";
 import { validateForm } from "./engine.ts";
+import { settleCaptcha } from "./captcha.ts";
 import { uid } from "./ids.ts";
 import { lintBlocksPublish, lintForm, type LintIssue } from "./lint.ts";
 import { incidentForm, supplierForm } from "./templates.ts";
@@ -448,12 +449,17 @@ export const useFormStore = create<FormState>()(
             return { ok: false, code: "FORM_VALIDATION_FAILED", message: "Submission contains invalid fields", errors };
           }
         }
+        const settled = input.draft ? { ok: true as const, data: input.data } : settleCaptcha(form.components, input.data);
+        if (!settled.ok) {
+          return { ok: false, code: "FORM_VALIDATION_FAILED", message: "Submission contains invalid fields", errors: settled.errors };
+        }
+        const payload = settled.data;
         const now = new Date().toISOString();
         const existing = input.existingId ? get().submissions.find((item) => item.id === input.existingId) : undefined;
         let submission: Submission = existing
           ? {
               ...existing,
-              data: input.data,
+              data: payload,
               updatedAt: now,
               status: input.draft ? "draft" : existing.status === "changes_requested" ? "in_review" : existing.status,
               revisions: [...existing.revisions, { at: now, actor: input.actor, note: input.draft ? "Draft saved" : "Updated", data: existing.data }],
@@ -466,7 +472,7 @@ export const useFormStore = create<FormState>()(
               createdAt: now,
               updatedAt: now,
               status: input.draft ? "draft" : form.workflow ? "in_review" : "submitted",
-              data: input.data,
+              data: payload,
               revisions: [],
               documents: [],
               workflow: input.draft ? undefined : startWorkflow(form, input.actor),

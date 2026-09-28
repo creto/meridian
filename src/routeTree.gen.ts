@@ -44,6 +44,7 @@ import { Route as ApiStoragePutRouteImport } from './routes/api/storage/put'
 import { Route as ApiStorageTestRouteImport } from './routes/api/storage/test'
 import { Route as WorkflowsWorkflowIdEditorRouteImport } from './routes/workflows.$workflowId.editor'
 import { Route as ApiAgentV1SplatRouteImport } from './routes/api/agent/v1/$'
+import { Route as ApiV1ComponentTypesSplatRouteImport } from './routes/api/v1/component-types/$'
 import { Route as PdfTemplatesTemplateIdEditorRouteImport } from './routes/pdf.templates.$templateId.editor'
 
 const IndexRoute = IndexRouteImport.update({
@@ -222,6 +223,12 @@ const ApiAgentV1SplatRoute = ApiAgentV1SplatRouteImport.update({
   path: '/api/agent/v1/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1ComponentTypesSplatRoute =
+  ApiV1ComponentTypesSplatRouteImport.update({
+    id: '/api/v1/component-types/$',
+    path: '/api/v1/component-types/$',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const PdfTemplatesTemplateIdEditorRoute =
   PdfTemplatesTemplateIdEditorRouteImport.update({
     id: '/pdf/templates/$templateId/editor',
@@ -265,6 +272,7 @@ export interface FileRoutesByFullPath {
   '/api/storage/test': typeof ApiStorageTestRoute
   '/workflows/$workflowId/editor': typeof WorkflowsWorkflowIdEditorRoute
   '/api/agent/v1/$': typeof ApiAgentV1SplatRoute
+  '/api/v1/component-types/$': typeof ApiV1ComponentTypesSplatRoute
   '/pdf/templates/$templateId/editor': typeof PdfTemplatesTemplateIdEditorRoute
 }
 export interface FileRoutesByTo {
@@ -303,6 +311,7 @@ export interface FileRoutesByTo {
   '/api/storage/test': typeof ApiStorageTestRoute
   '/workflows/$workflowId/editor': typeof WorkflowsWorkflowIdEditorRoute
   '/api/agent/v1/$': typeof ApiAgentV1SplatRoute
+  '/api/v1/component-types/$': typeof ApiV1ComponentTypesSplatRoute
   '/pdf/templates/$templateId/editor': typeof PdfTemplatesTemplateIdEditorRoute
 }
 export interface FileRoutesById {
@@ -342,6 +351,7 @@ export interface FileRoutesById {
   '/api/storage/test': typeof ApiStorageTestRoute
   '/workflows/$workflowId/editor': typeof WorkflowsWorkflowIdEditorRoute
   '/api/agent/v1/$': typeof ApiAgentV1SplatRoute
+  '/api/v1/component-types/$': typeof ApiV1ComponentTypesSplatRoute
   '/pdf/templates/$templateId/editor': typeof PdfTemplatesTemplateIdEditorRoute
 }
 export interface FileRouteTypes {
@@ -382,6 +392,7 @@ export interface FileRouteTypes {
     | '/api/storage/test'
     | '/workflows/$workflowId/editor'
     | '/api/agent/v1/$'
+    | '/api/v1/component-types/$'
     | '/pdf/templates/$templateId/editor'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -420,6 +431,7 @@ export interface FileRouteTypes {
     | '/api/storage/test'
     | '/workflows/$workflowId/editor'
     | '/api/agent/v1/$'
+    | '/api/v1/component-types/$'
     | '/pdf/templates/$templateId/editor'
   id:
     | '__root__'
@@ -458,6 +470,7 @@ export interface FileRouteTypes {
     | '/api/storage/test'
     | '/workflows/$workflowId/editor'
     | '/api/agent/v1/$'
+    | '/api/v1/component-types/$'
     | '/pdf/templates/$templateId/editor'
   fileRoutesById: FileRoutesById
 }
@@ -482,6 +495,7 @@ export interface RootRouteChildren {
   ApiStorageTestRoute: typeof ApiStorageTestRoute
   WorkflowsWorkflowIdEditorRoute: typeof WorkflowsWorkflowIdEditorRoute
   ApiAgentV1SplatRoute: typeof ApiAgentV1SplatRoute
+  ApiV1ComponentTypesSplatRoute: typeof ApiV1ComponentTypesSplatRoute
   PdfTemplatesTemplateIdEditorRoute: typeof PdfTemplatesTemplateIdEditorRoute
 }
 
@@ -732,6 +746,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1SplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/component-types/$': {
+      id: '/api/v1/component-types/$'
+      path: '/api/v1/component-types/$'
+      fullPath: '/api/v1/component-types/$'
+      preLoaderRoute: typeof ApiV1ComponentTypesSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/pdf/templates/$templateId/editor': {
       id: '/pdf/templates/$templateId/editor'
       path: '/pdf/templates/$templateId/editor'
@@ -801,6 +822,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiStorageTestRoute: ApiStorageTestRoute,
   WorkflowsWorkflowIdEditorRoute: WorkflowsWorkflowIdEditorRoute,
   ApiAgentV1SplatRoute: ApiAgentV1SplatRoute,
+  ApiV1ComponentTypesSplatRoute: ApiV1ComponentTypesSplatRoute,
   PdfTemplatesTemplateIdEditorRoute: PdfTemplatesTemplateIdEditorRoute,
 }
 export const routeTree = rootRouteImport

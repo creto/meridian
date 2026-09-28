@@ -51,6 +51,13 @@ function fieldSchema(component: FormComponent): Record<string, unknown> {
         },
         required: ["name", "sha256"],
       };
+    case "captcha":
+      return {
+        ...base,
+        type: "object",
+        properties: { id: { type: "string" }, passed: { type: "boolean" } },
+        required: ["id", "passed"],
+      };
     default:
       return { ...base, type: "string" };
   }
@@ -96,6 +103,7 @@ export function inputLabels(form: Pick<FormDefinition, "components">): { key: st
   const labels: { key: string; label: string }[] = [];
   walkComponents(form.components, ({ component, parent }) => {
     if (parent?.type === "datagrid" || parent?.type === "container") return;
+    if (component.formio?.tableView === false) return;
     if (!component.key || isLayout(component) || component.type === "button") return;
     if (component.type === "datagrid" || component.type === "container" || component.type === "hidden") {
       labels.push({ key: component.key, label: component.label });

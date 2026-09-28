@@ -1,9 +1,5 @@
 # Form.io upstream
 
-Meridian does not vendor the Form.io server. Form definitions in this repository are Meridian's own schema.
+The approved open-source package is `@formio/js` 5.2.4. See [UPSTREAM_FORMIO.md](/workspace/UPSTREAM_FORMIO.md) and [docs/formio-parity/FINAL_FORMIO_PARITY_REPORT.md](/workspace/docs/formio-parity/FINAL_FORMIO_PARITY_REPORT.md).
 
-The Form.io importer (`src/lib/import`) reads a Form.io JSON document into Meridian components. It does not call form.io at runtime and it does not keep a fork of that project.
-
-When Form.io adds a component type, the importer and `src/lib/forms/component-registry.ts` need an explicit mapping. Unknown types should fail the import rather than being dropped silently. Check the importer tests before changing that behavior.
-
-Angular rendering is the view-model package in `packages/angular`. It is not an upstream Form.io Angular distribution.
+Meridian does not vendor the Form.io server and does not execute legacy JavaScript from imported forms. The builder settings come from that package's edit forms. Unknown keys are stored on the component instead of being dropped.

@@ -1,19 +1,26 @@
 import { compileExpression } from "./expressions.ts";
+import { knownProperty, writeSetting } from "./formio/document.ts";
+import { propertyGuide } from "./formio/adapter.ts";
 import { generateFormFromText, normalizeAiComponents } from "./generate.ts";
 import { newFormShell } from "./importing.ts";
 import { uniqueKey } from "./ids.ts";
 import { collectKeys, insertComponent, mapComponents, removeComponent, walkComponents } from "./tree.ts";
-import type { FormComponent, FormDefinition, WorkflowDef, WorkflowNode } from "./types.ts";
+import type { FormComponent, FormDefinition, JsonValue, WorkflowDef, WorkflowNode } from "./types.ts";
 
 export const FORM_RULES = `You design forms for Meridian. Return only a JSON object, no markdown.
-Component types: textfield, textarea, number, email, phone, url, select, radio, checkbox, selectboxes, toggle, date, datetime, time, currency, file, signature, address, panel, datagrid, content, review.
+Component types: textfield, textarea, number, email, phone, url, select, radio, checkbox, selectboxes, toggle, date, datetime, time, currency, file, signature, address, captcha, panel, datagrid, content, review.
 Each component: type, key (camelCase), label, required (boolean), and when useful description, placeholder, conditional, calculateValue, values:[{label,value}], pattern, patternMessage.
 Panels hold components. When the form has several sections, display is "wizard" and each panel is a page. Put a review panel last when there is more than one page.
 conditional and calculateValue are safe expressions, never JavaScript. Examples: supplierType == "colombian_company" , paymentMethod == "transfer" , quantity * unitPrice. Operators: == != > < >= <= and or not. Functions: empty exists len IF SUM AVG MIN MAX COUNT round abs.
 Choice fields must include values. Keys are stable identifiers; labels can be any language.
 workflow, when a review path is requested: {"nodes":[{"id":"start","type":"start","title":"Submitted"},{"id":"review","type":"human","title":"Review","role":"Reviewer"},{"id":"done","type":"end","title":"Approved"},{"id":"rejected","type":"end","title":"Rejected"}],"edges":[{"from":"start","to":"review","when":"approved"},{"from":"review","to":"done","when":"approved"},{"from":"review","to":"rejected","when":"rejected"}]}.
 Service nodes may only use service "pdf" or "archive". Do not claim a cloud store is connected.
-Do not invent fields the user did not ask for, except a supplier-type choice when they contrast two kinds of answer, and a review page on a wizard.`;
+Do not invent fields the user did not ask for, except a supplier-type choice when they contrast two kinds of answer, and a review page on a wizard.
+Advanced Form.io settings are not a fixed list of nine. On an update operation you may include "formio": { "inputMask": "999", "clearOnHide": false, "prefix": "$" } using only property paths that exist for that component type. Do not invent paths. Safe expressions stay in conditional and calculateValue. Do not send JavaScript.`;
+
+export function editSystemPrompt(): string {
+  return `${EDIT_SYSTEM}\n\nProperty paths by component type:\n${propertyGuide()}`;
+}
 
 export const EDIT_SYSTEM = `${FORM_RULES}
 You are editing an existing form. Understand the instruction in whatever language it uses, including follow-ups like "that one", "make it optional", or "also add a phone".
@@ -248,6 +255,7 @@ export interface ModelOperation {
   patternMessage?: string;
   display?: "form" | "wizard";
   values?: { label: string; value: string }[];
+  formio?: { [key: string]: JsonValue };
   component?: FormComponent;
   components?: FormComponent[];
   workflow?: WorkflowDef;
@@ -324,6 +332,9 @@ export function normalizeOperations(raw: unknown): ModelOperation[] {
     if (source.display === "form" || source.display === "wizard") op.display = source.display;
     const values = readValues(source.values);
     if (values) op.values = values;
+    if (source.formio && typeof source.formio === "object" && !Array.isArray(source.formio)) {
+      op.formio = Object.fromEntries(Object.entries(source.formio as Record<string, unknown>).slice(0, 40)) as { [key: string]: JsonValue };
+    }
     if (source.component && typeof source.component === "object") {
       const built = normalizeAiComponents({ components: [source.component] })[0];
       if (built) op.component = sanitizeTree([built]).components[0];
@@ -424,6 +435,11 @@ export function applyOperations(components: FormComponent[], operations: unknown
         issues.push(`Kept the current pattern on ${target.label}.`);
         op.pattern = undefined;
       }
+      if (op.formio && typeof op.formio === "object" && !Array.isArray(op.formio)) {
+        for (const path of Object.keys(op.formio as Record<string, unknown>)) {
+          if (path !== "type" && !knownProperty(target, path)) issues.push(`“${path}” is not a ${target.type} setting.`);
+        }
+      }
       current = mapComponents(current, (component) => {
         if (component.id !== target.id) return component;
         const next = { ...component };
@@ -439,6 +455,15 @@ export function applyOperations(components: FormComponent[], operations: unknown
         if (values) next.values = values;
         if (typeof op.pattern === "string") {
           next.validate = { ...(next.validate ?? {}), pattern: op.pattern.slice(0, 200), patternMessage: typeof op.patternMessage === "string" ? op.patternMessage.slice(0, 160) : next.validate?.patternMessage };
+        }
+        const formioPatch = op.formio;
+        if (formioPatch && typeof formioPatch === "object" && !Array.isArray(formioPatch)) {
+          let patched = next;
+          for (const [path, value] of Object.entries(formioPatch as Record<string, unknown>)) {
+            if (path !== "type" && !knownProperty(patched, path)) continue;
+            patched = writeSetting(patched, path, value);
+          }
+          return patched;
         }
         return next;
       });

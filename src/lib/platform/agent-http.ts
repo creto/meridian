@@ -1,5 +1,6 @@
 import { incidentForm, supplierForm } from "../forms/templates.ts";
 import { validateForm } from "../forms/engine.ts";
+import { settleCaptcha } from "../forms/captcha.ts";
 import { generateFormFromText } from "../forms/generate.ts";
 import { uid } from "../forms/ids.ts";
 import { toCapabilities, toJsonSchema, toToolDefinition } from "../forms/schema-export.ts";
@@ -152,6 +153,9 @@ export async function handleAgent(method: string, path: string, request: Request
     }
     const errors = validateForm(form, data);
     if (Object.keys(errors).length) return json({ error: { code: "FORM_VALIDATION_FAILED", message: "Submission contains invalid fields", details: errors } }, 422);
+    const settled = settleCaptcha(form.components, data);
+    if (!settled.ok) return json({ error: { code: "FORM_VALIDATION_FAILED", message: "Submission contains invalid fields", details: settled.errors } }, 422);
+    const stored = settled.data;
     const now = new Date().toISOString();
     let submission: Submission = {
       id: uid("sub"),
@@ -161,7 +165,7 @@ export async function handleAgent(method: string, path: string, request: Request
       createdAt: now,
       updatedAt: now,
       status: form.workflow ? "in_review" : "submitted",
-      data,
+      data: stored,
       revisions: [],
       documents: [],
       workflow: startWorkflow(form, "agent"),

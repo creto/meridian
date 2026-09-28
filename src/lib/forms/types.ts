@@ -28,8 +28,11 @@ export type ComponentType =
   | "file"
   | "signature"
   | "address"
+  | "captcha"
   | "button"
   | "review";
+
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 export type Classification = "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "RESTRICTED";
 
@@ -50,6 +53,8 @@ export interface ValidateSpec {
   maxLength?: number;
   pattern?: string;
   patternMessage?: string;
+  minWords?: number;
+  maxWords?: number;
   /** Safe expression. Must be truthy. `value` is the field. */
   custom?: string;
   customMessage?: string;
@@ -92,6 +97,8 @@ export interface FormComponent {
   pdf?: PdfPlacement;
   /** Imported legacy logic that strict mode will not execute. */
   legacyNote?: string;
+  /** Lossless Form.io component document. Typed fields stay in sync for the native runtime. */
+  formio?: { [key: string]: JsonValue };
 }
 
 export type WorkflowNodeType = "start" | "human" | "approval" | "decision" | "service" | "http" | "webhook" | "timer" | "parallel" | "join" | "end";

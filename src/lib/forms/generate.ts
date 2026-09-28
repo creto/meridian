@@ -273,11 +273,29 @@ export function normalizeAiComponents(raw: unknown): FormComponent[] {
     if (typeof src.conditional === "string" && src.conditional.length < 300) component.conditional = src.conditional;
     if (typeof src.calculateValue === "string" && src.calculateValue.length < 300) component.calculateValue = src.calculateValue;
     if (Array.isArray(src.values)) {
-      component.values = src.values.slice(0, 30).map((item) => {
+      const values = src.values.slice(0, 30).map((item) => {
         const opt = item as { label?: string; value?: string };
         return { label: String(opt.label ?? opt.value ?? ""), value: String(opt.value ?? opt.label ?? "") };
       }).filter((opt) => opt.value);
+      if (values.length) component.values = values;
     }
+    if (src.validate && typeof src.validate === "object") {
+      const spec = src.validate as Record<string, unknown>;
+      const validate: NonNullable<FormComponent["validate"]> = {};
+      if (typeof spec.pattern === "string" && spec.pattern.length < 200) validate.pattern = spec.pattern;
+      if (typeof spec.patternMessage === "string") validate.patternMessage = spec.patternMessage.slice(0, 160);
+      if (typeof spec.minLength === "number") validate.minLength = spec.minLength;
+      if (typeof spec.maxLength === "number") validate.maxLength = spec.maxLength;
+      if (Object.keys(validate).length) component.validate = validate;
+    }
+    if (typeof src.pattern === "string" && src.pattern.length < 200) {
+      component.validate = { ...(component.validate ?? {}), pattern: src.pattern, patternMessage: typeof src.patternMessage === "string" ? src.patternMessage.slice(0, 160) : component.validate?.patternMessage };
+    }
+    if (src.classification === "PUBLIC" || src.classification === "INTERNAL" || src.classification === "CONFIDENTIAL" || src.classification === "RESTRICTED") {
+      component.classification = src.classification;
+    }
+    if (typeof src.semantic === "string") component.semantic = src.semantic.slice(0, 40);
+    if (typeof src.currency === "string") component.currency = src.currency.slice(0, 8);
     if (Array.isArray(src.components)) {
       component.components = src.components.map((child) => convert(child, depth + 1)).filter((c): c is FormComponent => !!c).slice(0, 40);
     }

@@ -1,15 +1,17 @@
 import { Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/shell";
 import { Badge, Button, FieldLabel, Input, Modal, Textarea } from "@/components/ui/primitives";
-import { generateFormWithModel } from "@/lib/forms/ai.functions";
+import { editFormWithModel, generateFormWithModel, type ChatTurn } from "@/lib/forms/ai.functions";
 import { generateFormFromText } from "@/lib/forms/generate";
 import { detectJsonImport, newFormShell, parseCsv, profileColumns, componentsFromProfiles, componentsFromFieldTable, looksLikeFieldTable } from "@/lib/forms/importing";
 import { importWorkbook, type SheetSummary } from "@/lib/forms/spreadsheet";
 import { useFormStore } from "@/lib/forms/store";
 import { TEMPLATES, templateById } from "@/lib/forms/templates";
 import { flattenInputs } from "@/lib/forms/tree";
+import { proposalFromModel } from "@/lib/forms/llm";
+import type { FormDefinition } from "@/lib/forms/types";
 import { uid } from "@/lib/forms/ids";
 
 const PROMPTS = [
@@ -128,13 +130,30 @@ export function CreateDialog({
   const [raw, setRaw] = useState("");
   const [note, setNote] = useState("");
   const [sheetPreview, setSheetPreview] = useState<{ name: string; buffer: ArrayBuffer; sheets: SheetSummary[] } | null>(null);
+  const [designed, setDesigned] = useState<FormDefinition | null>(null);
+  const [brief, setBrief] = useState("");
+  const [origin, setOrigin] = useState<"grok" | "local" | null>(null);
+  const [thread, setThread] = useState<ChatTurn[]>([]);
+  const [revision, setRevision] = useState("");
+
+  useEffect(() => {
+    if (open) return;
+    setDesigned(null);
+    setBrief("");
+    setOrigin(null);
+    setThread([]);
+    setRevision("");
+  }, [open]);
 
   const describe = async (provider: "auto" | "local") => {
     setBusy(true);
     try {
       if (provider === "local") {
-        onCreate(generateFormFromText(prompt));
-        toast.success("Form drafted on this device");
+        const form = generateFormFromText(prompt);
+        setDesigned(form);
+        setOrigin("local");
+        setBrief("Drafted on this device from the words it recognized. You can still ask Grok to revise it before opening the builder.");
+        setThread([{ role: "user", content: prompt }, { role: "assistant", content: "On-device draft." }]);
         return;
       }
       const result = await generateFormWithModel({ data: { prompt } });
@@ -142,10 +161,51 @@ export function CreateDialog({
         toast.error(result.error);
         return;
       }
-      onCreate(result.form);
-      toast.success(result.provider === "grok" ? "Drafted with Grok" : "Live model unavailable — drafted on this device");
+      setDesigned(result.form);
+      setOrigin(result.provider);
+      const spoken = result.reply || result.notice || `Drafted “${result.form.title}”.`;
+      setBrief(spoken);
+      setThread([{ role: "user", content: prompt }, { role: "assistant", content: spoken }]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not generate");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revise = async () => {
+    if (!designed) return;
+    const instruction = revision.trim();
+    if (instruction.length < 3) return;
+    setBusy(true);
+    try {
+      const result = await editFormWithModel({
+        data: {
+          instruction,
+          history: thread,
+          form: { id: designed.id, title: designed.title, description: designed.description, display: designed.display, components: designed.components, workflow: designed.workflow },
+        },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      const proposal = proposalFromModel(designed, result);
+      setBrief(proposal.reply || result.reply);
+      setThread((curr) => [...curr, { role: "user", content: instruction }, { role: "assistant", content: proposal.reply || result.reply }]);
+      setRevision("");
+      if (!proposal.valid) return;
+      setDesigned({
+        ...designed,
+        title: proposal.title,
+        description: proposal.description,
+        display: proposal.display,
+        components: proposal.components,
+        workflow: proposal.workflow ?? designed.workflow,
+      });
+      setOrigin(result.provider);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not revise");
     } finally {
       setBusy(false);
     }
@@ -195,18 +255,45 @@ export function CreateDialog({
       </div>
       {tab === "describe" ? (
         <div className="grid gap-3">
-          <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} aria-label="Form description" />
-          <div className="flex flex-wrap gap-2">
-            {PROMPTS.map((item) => (
-              <button key={item.slice(0, 24)} type="button" className="rounded-md border border-line px-2 py-1 text-left text-xs text-muted" onClick={() => setPrompt(item)}>
-                {item.slice(0, 42)}…
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={busy} onClick={() => void describe("auto")}>{busy ? "Drafting…" : "Generate"}</Button>
-            <Button variant="secondary" disabled={busy} onClick={() => void describe("local")}>Use on-device designer</Button>
-          </div>
+          {designed ? (
+            <div className="grid gap-3">
+              <div>
+                <p className="text-xs text-subtle">{origin === "local" ? "On-device" : "Grok"}</p>
+                <h3 className="text-lg font-semibold tracking-tight">{designed.title}</h3>
+                <p className="mt-1 text-sm text-muted">{brief}</p>
+              </div>
+              <ul className="grid max-h-48 gap-1 overflow-auto rounded-lg border border-line bg-paper p-3">
+                {flattenInputs(designed.components).slice(0, 16).map((field) => (
+                  <li key={field.id} className="text-sm">
+                    <span className="text-muted">{field.required ? "Required" : "Optional"}</span>
+                    {" · "}{field.label}
+                    {field.conditional ? <span className="text-subtle"> · when {field.conditional}</span> : null}
+                  </li>
+                ))}
+              </ul>
+              <Textarea value={revision} onChange={(event) => setRevision(event.target.value)} placeholder="Make the address optional, and add a website for foreign suppliers" aria-label="Revision" className="min-h-20" />
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={busy || revision.trim().length < 3} onClick={() => void revise()}>{busy ? "Revising…" : "Revise with Grok"}</Button>
+                <Button variant="secondary" disabled={busy} onClick={() => onCreate(designed)}>Open in the builder</Button>
+                <Button variant="ghost" disabled={busy} onClick={() => { setDesigned(null); setBrief(""); setThread([]); }}>Start over</Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} aria-label="Form description" placeholder="Describe who fills this in, which fields change based on their answers, and who has to approve it." />
+              <div className="flex flex-wrap gap-2">
+                {PROMPTS.map((item) => (
+                  <button key={item.slice(0, 24)} type="button" className="rounded-md border border-line px-2 py-1 text-left text-xs text-muted" onClick={() => setPrompt(item)}>
+                    {item.slice(0, 42)}…
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={busy || prompt.trim().length < 8} onClick={() => void describe("auto")}>{busy ? "Designing…" : "Design with Grok"}</Button>
+                <Button variant="secondary" disabled={busy || prompt.trim().length < 8} onClick={() => void describe("local")}>Use on-device designer</Button>
+              </div>
+            </>
+          )}
         </div>
       ) : null}
       {tab === "template" ? (

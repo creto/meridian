@@ -6,6 +6,8 @@ import { FormRuntime } from "@/components/forms/runtime";
 import { Mark } from "@/components/shell";
 import { Badge, Button, Input, Modal, Textarea } from "@/components/ui/primitives";
 import { proposeEdit } from "@/lib/forms/assistant";
+import { editFormWithModel, type ChatTurn } from "@/lib/forms/ai.functions";
+import { proposalFromModel, type EditProposal } from "@/lib/forms/llm";
 import { CATALOG, createComponent, GROUPS } from "@/lib/forms/catalog";
 import { semanticDiff } from "@/lib/forms/diff";
 import { lintForm } from "@/lib/forms/lint";
@@ -55,8 +57,6 @@ export function Studio({ formId }: { formId: string }) {
   const [publishOpen, setPublishOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [assistOpen, setAssistOpen] = useState(false);
-  const [instruction, setInstruction] = useState("");
-  const [proposal, setProposal] = useState<ReturnType<typeof proposeEdit> | null>(null);
   const [diffVersion, setDiffVersion] = useState<number | null>(null);
 
   const issues = useMemo(() => (form ? lintForm(form) : []), [form]);
@@ -230,7 +230,7 @@ export function Studio({ formId }: { formId: string }) {
             {MODES.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
-        <Button variant="ghost" className="h-10 text-chrome-fg hover:bg-white/10" onClick={() => setAssistOpen(true)}>Assist</Button>
+        <Button variant="ghost" className={cn("h-10 text-chrome-fg hover:bg-white/10", assistOpen && "bg-chrome-elev")} onClick={() => setAssistOpen((open) => !open)}>{assistOpen ? "Close Grok" : "Ask Grok"}</Button>
         <Button variant="secondary" className="h-10" onClick={() => setPublishOpen(true)}>Publish</Button>
       </header>
 
@@ -293,7 +293,7 @@ export function Studio({ formId }: { formId: string }) {
                 </div>
                 {form.components.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-line-strong p-10 text-center text-sm text-muted">
-                    Add a field from the palette, or describe the form with Assist.
+                    Add a field from the palette, or ask Grok to change this form.
                   </div>
                 ) : (
                   form.components.map((component) => (
@@ -479,26 +479,231 @@ export function Studio({ formId }: { formId: string }) {
         </ul>
       </Modal>
 
-      <Modal open={assistOpen} onOpenChange={setAssistOpen} title="Assistant" description="Changes are proposed as a patch. Nothing is applied until you confirm.">
-        <Textarea value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Make address optional" aria-label="Instruction" />
-        <div className="mt-3 flex gap-2">
-          <Button onClick={() => setProposal(proposeEdit(form, instruction))}>Propose</Button>
+      <Designer
+        key={form.id}
+        form={form}
+        open={assistOpen}
+        onClose={() => setAssistOpen(false)}
+        onApply={(proposal) => {
+          setPast((stack) => [...stack, form.components].slice(-40));
+          setFuture([]);
+          updateForm(form.id, (current) => ({
+            ...current,
+            title: proposal.title,
+            description: proposal.description,
+            display: proposal.display,
+            components: proposal.components,
+            workflow: proposal.workflow ?? current.workflow,
+          }), proposal.summary[0] ?? "Updated from the assistant");
+          toast.success("Applied to the canvas");
+        }}
+      />
+      <button type="button" className="sr-only" onClick={() => setVersionsOpen(true)}>Versions</button>
+    </div>
+  );
+}
+
+interface DesignerTurn {
+  role: "user" | "assistant";
+  content: string;
+  provider?: "grok" | "local";
+  proposal?: EditProposal;
+  status?: "pending" | "applied" | "discarded" | "revised";
+}
+
+function suggestionsFor(form: FormDefinition): string[] {
+  const first = flattenInputs(form.components)[0]?.label;
+  return [
+    form.components.length === 0 ? "Design this form from a short description of who fills it in" : "Add a notes field at the end",
+    form.display === "wizard" ? "Make this a single page" : "Turn this into a wizard and add a review page",
+    first ? `What is required, and when does ${first} appear?` : "Which fields should be required?",
+  ];
+}
+
+function Designer({
+  form,
+  open,
+  onClose,
+  onApply,
+}: {
+  form: FormDefinition;
+  open: boolean;
+  onClose: () => void;
+  onApply: (proposal: EditProposal) => void;
+}) {
+  const [turns, setTurns] = useState<DesignerTurn[]>([]);
+  const [instruction, setInstruction] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const pending = [...turns].reverse().find((turn) => turn.status === "pending" && turn.proposal?.valid);
+
+  const ask = async (text: string) => {
+    const content = text.trim();
+    if (content.length < 3 || busy) return;
+    const pendingTurn = [...turns].reverse().find((turn) => turn.status === "pending" && turn.proposal);
+    const base = pendingTurn?.proposal
+      ? {
+          ...form,
+          title: pendingTurn.proposal.title,
+          description: pendingTurn.proposal.description,
+          display: pendingTurn.proposal.display,
+          components: pendingTurn.proposal.components,
+          workflow: pendingTurn.proposal.workflow ?? form.workflow,
+        }
+      : form;
+    const history: ChatTurn[] = turns.slice(-8).map((turn) => ({
+      role: turn.role,
+      content: turn.status ? `${turn.content} (${turn.status})` : turn.content,
+    }));
+    setTurns((curr) => [...curr, { role: "user", content }]);
+    setInstruction("");
+    setBusy(true);
+    try {
+      const result = await editFormWithModel({
+        data: {
+          instruction: content,
+          history,
+          form: { id: base.id, title: base.title, description: base.description, display: base.display, components: base.components, workflow: base.workflow },
+        },
+      });
+      if (!result.ok) {
+        const local = proposeEdit(base, content);
+        if (!local.valid) {
+          setTurns((curr) => [...curr, { role: "assistant", content: result.error, provider: "local" }]);
+          return;
+        }
+        const next = local.apply(base);
+        const proposal: EditProposal = {
+          valid: true,
+          reply: `${result.error} The on-device designer suggested this instead.`,
+          summary: local.summary,
+          issues: local.issues,
+          title: next.title,
+          description: next.description,
+          display: next.display,
+          components: next.components,
+          workflow: next.workflow,
+        };
+        setTurns((curr) => curr.map((turn) => (turn.status === "pending" ? { ...turn, status: "revised" as const } : turn)).concat({
+          role: "assistant" as const,
+          content: proposal.reply,
+          provider: "local" as const,
+          proposal,
+          status: "pending" as const,
+        }));
+        return;
+      }
+      const proposal = proposalFromModel(base, result);
+      setTurns((curr) => {
+        const retired = proposal.valid ? curr.map((turn) => (turn.status === "pending" ? { ...turn, status: "revised" as const } : turn)) : curr;
+        return [...retired, {
+          role: "assistant",
+          content: proposal.reply || result.reply || "I need a more specific change.",
+          provider: result.provider,
+          proposal: proposal.valid ? proposal : undefined,
+          status: proposal.valid ? "pending" : undefined,
+        }];
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The assistant didn't answer";
+      setTurns((curr) => [...curr, { role: "assistant", content: message }]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) return null;
+  return (
+    <aside className="fixed inset-0 z-30 flex flex-col bg-paper text-paper-fg sm:inset-y-0 sm:left-auto sm:w-[26rem] sm:border-l sm:border-line sm:shadow-lg">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4">
+        <div>
+          <h2 className="text-sm font-semibold">Ask Grok</h2>
+          <p className="text-xs text-muted">Nothing changes on the canvas until you apply it.</p>
         </div>
-        {proposal ? (
-          <div className="mt-4 grid gap-2">
-            {proposal.summary.map((line) => <p key={line} className="text-sm">+ {line}</p>)}
-            {proposal.issues.map((line) => <p key={line} className="text-sm text-warn">{line}</p>)}
-            <Button disabled={!proposal.valid} onClick={() => {
-              const next = proposal.apply(form);
-              updateForm(form.id, () => next);
-              toast.success("Patch applied");
-              setProposal(null);
-              setAssistOpen(false);
-            }}>Apply</Button>
+        <Button variant="ghost" className="h-10" onClick={onClose}>Close</Button>
+      </header>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-4" role="log" aria-live="polite">
+        {turns.length === 0 ? (
+          <div className="grid gap-2">
+            <p className="text-sm text-muted">Describe a change in ordinary language. You can follow up — “make that optional”, “also add a phone” — and Grok keeps the draft in mind.</p>
+            {suggestionsFor(form).map((item) => (
+              <button key={item} type="button" className="rounded-lg border border-line px-3 py-3 text-left text-sm hover:bg-surface" onClick={() => setInstruction(item)}>
+                {item}
+              </button>
+            ))}
           </div>
         ) : null}
-      </Modal>
-      <button type="button" className="sr-only" onClick={() => setVersionsOpen(true)}>Versions</button>
+        {turns.map((turn, index) => (
+          <article key={index} className={turn.role === "user" ? "ml-8 rounded-lg bg-chrome px-3 py-3 text-sm text-chrome-fg" : "mr-6 grid gap-2"}>
+            {turn.role === "assistant" ? <p className="text-xs text-subtle">{turn.provider === "local" ? "On-device" : "Grok"}</p> : null}
+            <p className="whitespace-pre-wrap text-sm">{turn.content}</p>
+            {turn.proposal && turn.status === "pending" ? <ProposalCard form={form} proposal={turn.proposal} onApply={() => {
+              onApply(turn.proposal!);
+              setTurns((curr) => curr.map((item, itemIndex) => (itemIndex === index ? { ...item, status: "applied" } : item)));
+            }} onDiscard={() => setTurns((curr) => curr.map((item, itemIndex) => (itemIndex === index ? { ...item, status: "discarded" } : item)))} /> : null}
+            {turn.status === "applied" ? <p className="text-xs text-ok">Applied to the canvas. You can keep going.</p> : null}
+            {turn.status === "revised" ? <p className="text-xs text-subtle">Folded into the next draft.</p> : null}
+            {turn.status === "discarded" && turn.proposal ? <p className="text-xs text-subtle">Not applied.</p> : null}
+          </article>
+        ))}
+        {busy ? <p className="text-sm text-muted">Grok is reading {form.title}…</p> : null}
+      </div>
+      <form
+        className="grid gap-2 border-t border-line p-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void ask(instruction);
+        }}
+      >
+        {pending ? <p className="text-xs text-muted">A change is waiting. Apply it, or send another instruction to revise the draft.</p> : null}
+        <Textarea
+          value={instruction}
+          onChange={(event) => setInstruction(event.target.value)}
+          placeholder="Add a website, and show it only for foreign suppliers"
+          aria-label="Instruction"
+          className="min-h-20"
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void ask(instruction);
+            }
+          }}
+        />
+        <div className="flex justify-end">
+          <Button type="submit" disabled={busy || instruction.trim().length < 3}>{busy ? "Reading…" : "Send"}</Button>
+        </div>
+      </form>
+    </aside>
+  );
+}
+
+function ProposalCard({
+  form,
+  proposal,
+  onApply,
+  onDiscard,
+}: {
+  form: FormDefinition;
+  proposal: EditProposal;
+  onApply: () => void;
+  onDiscard: () => void;
+}) {
+  const diff = semanticDiff(form.components, proposal.components);
+  const workflowChanged = JSON.stringify(proposal.workflow ?? null) !== JSON.stringify(form.workflow ?? null);
+  return (
+    <div className="grid gap-2 rounded-lg border border-line bg-surface p-3">
+      {diff.added.map((line) => <p key={line} className="text-sm">Add {line}</p>)}
+      {diff.removed.map((line) => <p key={line} className="text-sm">Remove {line}</p>)}
+      {diff.changed.map((line) => <p key={line} className="text-sm">{line}</p>)}
+      {proposal.title !== form.title ? <p className="text-sm">Title becomes “{proposal.title}”</p> : null}
+      {proposal.display !== form.display ? <p className="text-sm">{proposal.display === "wizard" ? "Becomes a wizard" : "Becomes a single page"}</p> : null}
+      {workflowChanged ? <p className="text-sm">Workflow updated</p> : null}
+      {proposal.issues.map((line) => <p key={line} className="text-sm text-warn">{line}</p>)}
+      {diff.added.length + diff.removed.length + diff.changed.length === 0 && proposal.title === form.title && !workflowChanged ? <p className="text-sm text-muted">No field changes to show.</p> : null}
+      <div className="flex flex-wrap gap-2 pt-1">
+        <Button className="h-10" onClick={onApply}>Apply to canvas</Button>
+        <Button variant="secondary" className="h-10" onClick={onDiscard}>Discard</Button>
+      </div>
     </div>
   );
 }

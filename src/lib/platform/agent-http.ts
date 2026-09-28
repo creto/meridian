@@ -15,7 +15,11 @@ function json(body: unknown, status = 200) {
 }
 
 async function commit(snap: WorkspaceSnapshot): Promise<WorkspaceSnapshot> {
-  await persistSnapshot(snap);
+  try {
+    await persistSnapshot(snap);
+  } catch (error) {
+    console.error("[agent] snapshot not persisted:", error instanceof Error ? error.message : error);
+  }
   return snap;
 }
 
@@ -41,7 +45,7 @@ async function resumeTimers(): Promise<void> {
 async function ensureSeed() {
   if (readSnapshot().forms.length > 0) return;
   const seeded = writeSnapshot({ revision: 1, forms: [supplierForm(), incidentForm()], submissions: [], idempotency: [] });
-  await persistSnapshot(seeded);
+  await commit(seeded);
 }
 
 function findForm(nameOrId: string): FormDefinition | undefined {
@@ -50,7 +54,11 @@ function findForm(nameOrId: string): FormDefinition | undefined {
 }
 
 export async function handleAgent(method: string, path: string, request: Request): Promise<Response> {
-  await bootPlatform();
+  try {
+    await bootPlatform();
+  } catch (error) {
+    console.error("[agent] persistence unavailable:", error instanceof Error ? error.message : error);
+  }
   await resumeTimers();
   await ensureSeed();
   const parts = path.split("/").filter(Boolean);

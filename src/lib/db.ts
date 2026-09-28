@@ -48,7 +48,14 @@ const globalRef = globalThis as typeof globalThis & {
   __pgSqlPromise__?: Promise<Sql>;
   __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite>;
   __pgliteMigrateChain__?: Promise<void>;
+  __pgliteBlocked__?: boolean;
 };
+
+function rememberPgliteFailure(err: unknown) {
+  const error = err as { path?: string; message?: string; cause?: { path?: string } };
+  const path = `${error?.path ?? ""} ${error?.cause?.path ?? ""} ${error?.message ?? ""}`;
+  if (path.includes("pglite")) globalRef.__pgliteBlocked__ = true;
+}
 
 /**
  * Result-type parity: Postgres sends every value as text plus a type OID — the
@@ -129,6 +136,7 @@ async function createPgliteSql(): Promise<Sql> {
     return pg;
   })().catch((err) => {
     globalRef.__pgliteInstance__ = undefined;
+    rememberPgliteFailure(err);
     throw err;
   });
   const pg = await globalRef.__pgliteInstance__;
@@ -191,8 +199,12 @@ async function createSql(): Promise<Sql> {
  * both backends — define tables there, never inline in server functions.
  */
 export function getSql(): Promise<Sql> {
+  if (dbSource === "pglite" && globalRef.__pgliteBlocked__) {
+    return Promise.reject(new Error("Embedded database is unavailable"));
+  }
   sqlPromise ??= createSql().catch((err) => {
     sqlPromise = null; // don't memoize failures — let the next call retry
+    rememberPgliteFailure(err);
     throw err;
   });
   return sqlPromise;
@@ -230,13 +242,29 @@ export function ensureDbReady(): Promise<void> {
 
 // Server-only eager start: kick PGLite bootstrap as soon as this module loads in
 // Node. Client bundles never hit this path (`getSql` throws in the browser).
+// PGLite's WASM bundle can also reject an internal file read that is not the
+// promise we await. That rejection must not kill the process — forms do not
+// need the embedded database to render.
 const globalBoot = globalThis as typeof globalThis & {
   __pgBootstrapPromise__?: Promise<void>;
+  __pgliteRejectionGuard__?: boolean;
 };
+if (typeof window === "undefined" && !globalBoot.__pgliteRejectionGuard__) {
+  globalBoot.__pgliteRejectionGuard__ = true;
+  process.on("unhandledRejection", (err) => {
+    const error = err as { code?: string; path?: string };
+    if (error?.code === "ENOENT" && typeof error.path === "string" && error.path.includes("pglite")) {
+      globalRef.__pgliteBlocked__ = true;
+      console.error("[db] PGLite data file is missing; continuing without the embedded database.");
+      return;
+    }
+    console.error("[db] unhandled rejection:", err);
+    process.exit(1);
+  });
+}
 if (typeof window === "undefined" && dbSource === "pglite") {
   globalBoot.__pgBootstrapPromise__ ??= ensureDbReady().catch((err) => {
     globalBoot.__pgBootstrapPromise__ = undefined;
-    console.error("[db] PGLite bootstrap failed:", err);
-    throw err;
+    console.error("[db] PGLite bootstrap failed:", err instanceof Error ? err.message : err);
   });
 }

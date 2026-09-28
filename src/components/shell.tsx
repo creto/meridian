@@ -9,6 +9,7 @@ const NAV = [
   { to: "/", label: "Forms", icon: SquarePen },
   { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/agent", label: "Agent", icon: Bot },
+  { to: "/search", label: "Search", icon: Search },
   { to: "/admin", label: "Admin", icon: Settings },
   { to: "/developer", label: "API", icon: Code2 },
   { to: "/reference", label: "Reference", icon: BookOpen },

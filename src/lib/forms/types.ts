@@ -101,7 +101,7 @@ export interface WorkflowNode {
   type: WorkflowNodeType;
   title: string;
   role?: string;
-  service?: "pdf" | "archive" | "storage" | "http" | "webhook";
+  service?: "pdf" | "archive" | "storage" | "http" | "webhook" | "ecm" | "email" | "ai";
   /** Absolute URL for http/webhook service nodes. */
   url?: string;
   /** Relative delay before the runner continues. Zero fires immediately. */
@@ -109,6 +109,10 @@ export interface WorkflowNode {
   /** Parallel join policy. Default is all incoming branches. */
   join?: "all" | "any" | "n";
   joinCount?: number;
+  retryLimit?: number;
+  emailTemplate?: string;
+  aiInstruction?: string;
+  ecmProfile?: string;
 }
 
 export interface WorkflowEdge {

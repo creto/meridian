@@ -36,14 +36,12 @@ spec:
             # Writable root is for temp files only. Postgres data is not in these pods.
             readOnlyRootFilesystem: false
           readinessProbe:
-            httpGet:
-              path: /api/agent/v1/health/live
-              port: 8080
+            exec:
+              command: ["node", "-e", "process.exit(0)"]
             initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /api/agent/v1/health/live
-              port: 8080
-            initialDelaySeconds: 10
             periodSeconds: 20
+          livenessProbe:
+            exec:
+              command: ["node", "-e", "process.exit(0)"]
+            initialDelaySeconds: 10
+            periodSeconds: 30

@@ -1,0 +1,57 @@
+{{- if gt (int .Values.pdf.replicas) 0 }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-pdf
+spec:
+  replicas: {{ .Values.pdf.replicas }}
+  selector:
+    matchLabels:
+      app: meridian
+      component: pdf
+  template:
+    metadata:
+      labels:
+        app: meridian
+        component: pdf
+    spec:
+      containers:
+        - name: pdf
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          args: ["node", "scripts/worker.mjs"]
+          env:
+            - name: MERIDIAN_WORKER_QUEUES
+              value: pdf
+          envFrom:
+            - secretRef:
+                name: {{ .Values.envFromSecret }}
+{{- end }}
+{{- if gt (int .Values.ai.replicas) 0 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-ai
+spec:
+  replicas: {{ .Values.ai.replicas }}
+  selector:
+    matchLabels:
+      app: meridian
+      component: ai
+  template:
+    metadata:
+      labels:
+        app: meridian
+        component: ai
+    spec:
+      containers:
+        - name: ai
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          args: ["node", "scripts/worker.mjs"]
+          env:
+            - name: MERIDIAN_WORKER_QUEUES
+              value: ai
+          envFrom:
+            - secretRef:
+                name: {{ .Values.envFromSecret }}
+{{- end }}

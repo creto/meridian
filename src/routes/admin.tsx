@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/shell";
@@ -68,6 +68,16 @@ function AdminPage() {
             Connections run real requests. A secret is sent once to the server vault and is not shown again. The vault lives in this server process — it is not a KMS, and a restart clears it. Nothing is marked connected until the request succeeds.
           </p>
         </header>
+        <nav className="flex flex-wrap gap-2 text-sm" aria-label="Admin sections">
+          <Link className="rounded-md border border-line px-2 py-1" to="/admin/users">Users</Link>
+          <Link className="rounded-md border border-line px-2 py-1" to="/admin/roles">Roles</Link>
+          <Link className="rounded-md border border-line px-2 py-1" to="/admin/jobs">Jobs</Link>
+          <Link className="rounded-md border border-line px-2 py-1" to="/admin/audit">Audit</Link>
+          <Link className="rounded-md border border-line px-2 py-1" to="/admin/storage">Storage</Link>
+          <Link className="rounded-md border border-line px-2 py-1" to="/admin/health">Health</Link>
+          <Link className="rounded-md border border-line px-2 py-1" to="/pdf/templates/$templateId/editor" params={{ templateId: "northwind" }}>PDF editor</Link>
+          <Link className="rounded-md border border-line px-2 py-1" to="/workflows/$workflowId/editor" params={{ workflowId: "northwind" }}>Workflow editor</Link>
+        </nav>
         <section className="rounded-xl border border-line bg-surface p-4">
           <h2 className="font-semibold">Role</h2>
           <p className="mt-1 text-sm text-muted">Enforced on save, publish, submit, and approval. Hiding a button is not the check.</p>

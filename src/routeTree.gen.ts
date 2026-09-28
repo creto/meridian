@@ -12,17 +12,39 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AgentRouteImport } from './routes/agent'
+import { Route as DatasourcesRouteImport } from './routes/datasources'
 import { Route as DeveloperRouteImport } from './routes/developer'
 import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as ReferenceRouteImport } from './routes/reference'
+import { Route as SearchRouteImport } from './routes/search'
+import { Route as AdminAiRouteImport } from './routes/admin.ai'
+import { Route as AdminApiClientsRouteImport } from './routes/admin.api-clients'
+import { Route as AdminAuditRouteImport } from './routes/admin.audit'
+import { Route as AdminEcmRouteImport } from './routes/admin.ecm'
+import { Route as AdminFeatureFlagsRouteImport } from './routes/admin.feature-flags'
+import { Route as AdminHealthRouteImport } from './routes/admin.health'
+import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
+import { Route as AdminJobsRouteImport } from './routes/admin.jobs'
+import { Route as AdminRolesRouteImport } from './routes/admin.roles'
+import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminStorageRouteImport } from './routes/admin.storage'
+import { Route as AdminTenantsRouteImport } from './routes/admin.tenants'
+import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as AdminWebhooksRouteImport } from './routes/admin.webhooks'
+import { Route as AdminWorkspacesRouteImport } from './routes/admin.workspaces'
 import { Route as FillFormIdRouteImport } from './routes/fill.$formId'
 import { Route as HealthLiveRouteImport } from './routes/health.live'
 import { Route as HealthReadyRouteImport } from './routes/health.ready'
+import { Route as PdfDocumentsRouteImport } from './routes/pdf.documents'
 import { Route as StudioFormIdRouteImport } from './routes/studio.$formId'
+import { Route as ApiAdminSplatRouteImport } from './routes/api/admin/$'
 import { Route as ApiHooksDeliverRouteImport } from './routes/api/hooks/deliver'
+import { Route as ApiPlatformSplatRouteImport } from './routes/api/platform/$'
 import { Route as ApiStoragePutRouteImport } from './routes/api/storage/put'
 import { Route as ApiStorageTestRouteImport } from './routes/api/storage/test'
+import { Route as WorkflowsWorkflowIdEditorRouteImport } from './routes/workflows.$workflowId.editor'
 import { Route as ApiAgentV1SplatRouteImport } from './routes/api/agent/v1/$'
+import { Route as PdfTemplatesTemplateIdEditorRouteImport } from './routes/pdf.templates.$templateId.editor'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -37,6 +59,11 @@ const AdminRoute = AdminRouteImport.update({
 const AgentRoute = AgentRouteImport.update({
   id: '/agent',
   path: '/agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DatasourcesRoute = DatasourcesRouteImport.update({
+  id: '/datasources',
+  path: '/datasources',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DeveloperRoute = DeveloperRouteImport.update({
@@ -54,6 +81,86 @@ const ReferenceRoute = ReferenceRouteImport.update({
   path: '/reference',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAiRoute = AdminAiRouteImport.update({
+  id: '/ai',
+  path: '/ai',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminApiClientsRoute = AdminApiClientsRouteImport.update({
+  id: '/api-clients',
+  path: '/api-clients',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAuditRoute = AdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEcmRoute = AdminEcmRouteImport.update({
+  id: '/ecm',
+  path: '/ecm',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminFeatureFlagsRoute = AdminFeatureFlagsRouteImport.update({
+  id: '/feature-flags',
+  path: '/feature-flags',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminHealthRoute = AdminHealthRouteImport.update({
+  id: '/health',
+  path: '/health',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
+  id: '/integrations',
+  path: '/integrations',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminJobsRoute = AdminJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminRolesRoute = AdminRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminStorageRoute = AdminStorageRouteImport.update({
+  id: '/storage',
+  path: '/storage',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminTenantsRoute = AdminTenantsRouteImport.update({
+  id: '/tenants',
+  path: '/tenants',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminWebhooksRoute = AdminWebhooksRouteImport.update({
+  id: '/webhooks',
+  path: '/webhooks',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminWorkspacesRoute = AdminWorkspacesRouteImport.update({
+  id: '/workspaces',
+  path: '/workspaces',
+  getParentRoute: () => AdminRoute,
+} as any)
 const FillFormIdRoute = FillFormIdRouteImport.update({
   id: '/fill/$formId',
   path: '/fill/$formId',
@@ -69,14 +176,29 @@ const HealthReadyRoute = HealthReadyRouteImport.update({
   path: '/health/ready',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PdfDocumentsRoute = PdfDocumentsRouteImport.update({
+  id: '/pdf/documents',
+  path: '/pdf/documents',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StudioFormIdRoute = StudioFormIdRouteImport.update({
   id: '/studio/$formId',
   path: '/studio/$formId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminSplatRoute = ApiAdminSplatRouteImport.update({
+  id: '/api/admin/$',
+  path: '/api/admin/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHooksDeliverRoute = ApiHooksDeliverRouteImport.update({
   id: '/api/hooks/deliver',
   path: '/api/hooks/deliver',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPlatformSplatRoute = ApiPlatformSplatRouteImport.update({
+  id: '/api/platform/$',
+  path: '/api/platform/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiStoragePutRoute = ApiStoragePutRouteImport.update({
@@ -89,60 +211,138 @@ const ApiStorageTestRoute = ApiStorageTestRouteImport.update({
   path: '/api/storage/test',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WorkflowsWorkflowIdEditorRoute =
+  WorkflowsWorkflowIdEditorRouteImport.update({
+    id: '/workflows/$workflowId/editor',
+    path: '/workflows/$workflowId/editor',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1SplatRoute = ApiAgentV1SplatRouteImport.update({
   id: '/api/agent/v1/$',
   path: '/api/agent/v1/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PdfTemplatesTemplateIdEditorRoute =
+  PdfTemplatesTemplateIdEditorRouteImport.update({
+    id: '/pdf/templates/$templateId/editor',
+    path: '/pdf/templates/$templateId/editor',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/agent': typeof AgentRoute
+  '/datasources': typeof DatasourcesRoute
   '/developer': typeof DeveloperRoute
   '/inbox': typeof InboxRoute
   '/reference': typeof ReferenceRoute
+  '/search': typeof SearchRoute
+  '/admin/ai': typeof AdminAiRoute
+  '/admin/api-clients': typeof AdminApiClientsRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/ecm': typeof AdminEcmRoute
+  '/admin/feature-flags': typeof AdminFeatureFlagsRoute
+  '/admin/health': typeof AdminHealthRoute
+  '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/jobs': typeof AdminJobsRoute
+  '/admin/roles': typeof AdminRolesRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/storage': typeof AdminStorageRoute
+  '/admin/tenants': typeof AdminTenantsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/admin/webhooks': typeof AdminWebhooksRoute
+  '/admin/workspaces': typeof AdminWorkspacesRoute
   '/fill/$formId': typeof FillFormIdRoute
   '/health/live': typeof HealthLiveRoute
   '/health/ready': typeof HealthReadyRoute
+  '/pdf/documents': typeof PdfDocumentsRoute
   '/studio/$formId': typeof StudioFormIdRoute
+  '/api/admin/$': typeof ApiAdminSplatRoute
   '/api/hooks/deliver': typeof ApiHooksDeliverRoute
+  '/api/platform/$': typeof ApiPlatformSplatRoute
   '/api/storage/put': typeof ApiStoragePutRoute
   '/api/storage/test': typeof ApiStorageTestRoute
+  '/workflows/$workflowId/editor': typeof WorkflowsWorkflowIdEditorRoute
   '/api/agent/v1/$': typeof ApiAgentV1SplatRoute
+  '/pdf/templates/$templateId/editor': typeof PdfTemplatesTemplateIdEditorRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/agent': typeof AgentRoute
+  '/datasources': typeof DatasourcesRoute
   '/developer': typeof DeveloperRoute
   '/inbox': typeof InboxRoute
   '/reference': typeof ReferenceRoute
+  '/search': typeof SearchRoute
+  '/admin/ai': typeof AdminAiRoute
+  '/admin/api-clients': typeof AdminApiClientsRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/ecm': typeof AdminEcmRoute
+  '/admin/feature-flags': typeof AdminFeatureFlagsRoute
+  '/admin/health': typeof AdminHealthRoute
+  '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/jobs': typeof AdminJobsRoute
+  '/admin/roles': typeof AdminRolesRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/storage': typeof AdminStorageRoute
+  '/admin/tenants': typeof AdminTenantsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/admin/webhooks': typeof AdminWebhooksRoute
+  '/admin/workspaces': typeof AdminWorkspacesRoute
   '/fill/$formId': typeof FillFormIdRoute
   '/health/live': typeof HealthLiveRoute
   '/health/ready': typeof HealthReadyRoute
+  '/pdf/documents': typeof PdfDocumentsRoute
   '/studio/$formId': typeof StudioFormIdRoute
+  '/api/admin/$': typeof ApiAdminSplatRoute
   '/api/hooks/deliver': typeof ApiHooksDeliverRoute
+  '/api/platform/$': typeof ApiPlatformSplatRoute
   '/api/storage/put': typeof ApiStoragePutRoute
   '/api/storage/test': typeof ApiStorageTestRoute
+  '/workflows/$workflowId/editor': typeof WorkflowsWorkflowIdEditorRoute
   '/api/agent/v1/$': typeof ApiAgentV1SplatRoute
+  '/pdf/templates/$templateId/editor': typeof PdfTemplatesTemplateIdEditorRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/agent': typeof AgentRoute
+  '/datasources': typeof DatasourcesRoute
   '/developer': typeof DeveloperRoute
   '/inbox': typeof InboxRoute
   '/reference': typeof ReferenceRoute
+  '/search': typeof SearchRoute
+  '/admin/ai': typeof AdminAiRoute
+  '/admin/api-clients': typeof AdminApiClientsRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/ecm': typeof AdminEcmRoute
+  '/admin/feature-flags': typeof AdminFeatureFlagsRoute
+  '/admin/health': typeof AdminHealthRoute
+  '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/jobs': typeof AdminJobsRoute
+  '/admin/roles': typeof AdminRolesRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/storage': typeof AdminStorageRoute
+  '/admin/tenants': typeof AdminTenantsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/admin/webhooks': typeof AdminWebhooksRoute
+  '/admin/workspaces': typeof AdminWorkspacesRoute
   '/fill/$formId': typeof FillFormIdRoute
   '/health/live': typeof HealthLiveRoute
   '/health/ready': typeof HealthReadyRoute
+  '/pdf/documents': typeof PdfDocumentsRoute
   '/studio/$formId': typeof StudioFormIdRoute
+  '/api/admin/$': typeof ApiAdminSplatRoute
   '/api/hooks/deliver': typeof ApiHooksDeliverRoute
+  '/api/platform/$': typeof ApiPlatformSplatRoute
   '/api/storage/put': typeof ApiStoragePutRoute
   '/api/storage/test': typeof ApiStorageTestRoute
+  '/workflows/$workflowId/editor': typeof WorkflowsWorkflowIdEditorRoute
   '/api/agent/v1/$': typeof ApiAgentV1SplatRoute
+  '/pdf/templates/$templateId/editor': typeof PdfTemplatesTemplateIdEditorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -150,66 +350,139 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/agent'
+    | '/datasources'
     | '/developer'
     | '/inbox'
     | '/reference'
+    | '/search'
+    | '/admin/ai'
+    | '/admin/api-clients'
+    | '/admin/audit'
+    | '/admin/ecm'
+    | '/admin/feature-flags'
+    | '/admin/health'
+    | '/admin/integrations'
+    | '/admin/jobs'
+    | '/admin/roles'
+    | '/admin/settings'
+    | '/admin/storage'
+    | '/admin/tenants'
+    | '/admin/users'
+    | '/admin/webhooks'
+    | '/admin/workspaces'
     | '/fill/$formId'
     | '/health/live'
     | '/health/ready'
+    | '/pdf/documents'
     | '/studio/$formId'
+    | '/api/admin/$'
     | '/api/hooks/deliver'
+    | '/api/platform/$'
     | '/api/storage/put'
     | '/api/storage/test'
+    | '/workflows/$workflowId/editor'
     | '/api/agent/v1/$'
+    | '/pdf/templates/$templateId/editor'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/admin'
     | '/agent'
+    | '/datasources'
     | '/developer'
     | '/inbox'
     | '/reference'
+    | '/search'
+    | '/admin/ai'
+    | '/admin/api-clients'
+    | '/admin/audit'
+    | '/admin/ecm'
+    | '/admin/feature-flags'
+    | '/admin/health'
+    | '/admin/integrations'
+    | '/admin/jobs'
+    | '/admin/roles'
+    | '/admin/settings'
+    | '/admin/storage'
+    | '/admin/tenants'
+    | '/admin/users'
+    | '/admin/webhooks'
+    | '/admin/workspaces'
     | '/fill/$formId'
     | '/health/live'
     | '/health/ready'
+    | '/pdf/documents'
     | '/studio/$formId'
+    | '/api/admin/$'
     | '/api/hooks/deliver'
+    | '/api/platform/$'
     | '/api/storage/put'
     | '/api/storage/test'
+    | '/workflows/$workflowId/editor'
     | '/api/agent/v1/$'
+    | '/pdf/templates/$templateId/editor'
   id:
     | '__root__'
     | '/'
     | '/admin'
     | '/agent'
+    | '/datasources'
     | '/developer'
     | '/inbox'
     | '/reference'
+    | '/search'
+    | '/admin/ai'
+    | '/admin/api-clients'
+    | '/admin/audit'
+    | '/admin/ecm'
+    | '/admin/feature-flags'
+    | '/admin/health'
+    | '/admin/integrations'
+    | '/admin/jobs'
+    | '/admin/roles'
+    | '/admin/settings'
+    | '/admin/storage'
+    | '/admin/tenants'
+    | '/admin/users'
+    | '/admin/webhooks'
+    | '/admin/workspaces'
     | '/fill/$formId'
     | '/health/live'
     | '/health/ready'
+    | '/pdf/documents'
     | '/studio/$formId'
+    | '/api/admin/$'
     | '/api/hooks/deliver'
+    | '/api/platform/$'
     | '/api/storage/put'
     | '/api/storage/test'
+    | '/workflows/$workflowId/editor'
     | '/api/agent/v1/$'
+    | '/pdf/templates/$templateId/editor'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AgentRoute: typeof AgentRoute
+  DatasourcesRoute: typeof DatasourcesRoute
   DeveloperRoute: typeof DeveloperRoute
   InboxRoute: typeof InboxRoute
   ReferenceRoute: typeof ReferenceRoute
+  SearchRoute: typeof SearchRoute
   FillFormIdRoute: typeof FillFormIdRoute
   HealthLiveRoute: typeof HealthLiveRoute
   HealthReadyRoute: typeof HealthReadyRoute
+  PdfDocumentsRoute: typeof PdfDocumentsRoute
   StudioFormIdRoute: typeof StudioFormIdRoute
+  ApiAdminSplatRoute: typeof ApiAdminSplatRoute
   ApiHooksDeliverRoute: typeof ApiHooksDeliverRoute
+  ApiPlatformSplatRoute: typeof ApiPlatformSplatRoute
   ApiStoragePutRoute: typeof ApiStoragePutRoute
   ApiStorageTestRoute: typeof ApiStorageTestRoute
+  WorkflowsWorkflowIdEditorRoute: typeof WorkflowsWorkflowIdEditorRoute
   ApiAgentV1SplatRoute: typeof ApiAgentV1SplatRoute
+  PdfTemplatesTemplateIdEditorRoute: typeof PdfTemplatesTemplateIdEditorRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -235,6 +508,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/datasources': {
+      id: '/datasources'
+      path: '/datasources'
+      fullPath: '/datasources'
+      preLoaderRoute: typeof DatasourcesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/developer': {
       id: '/developer'
       path: '/developer'
@@ -255,6 +535,118 @@ declare module '@tanstack/react-router' {
       fullPath: '/reference'
       preLoaderRoute: typeof ReferenceRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/ai': {
+      id: '/admin/ai'
+      path: '/ai'
+      fullPath: '/admin/ai'
+      preLoaderRoute: typeof AdminAiRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/api-clients': {
+      id: '/admin/api-clients'
+      path: '/api-clients'
+      fullPath: '/admin/api-clients'
+      preLoaderRoute: typeof AdminApiClientsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/audit': {
+      id: '/admin/audit'
+      path: '/audit'
+      fullPath: '/admin/audit'
+      preLoaderRoute: typeof AdminAuditRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/ecm': {
+      id: '/admin/ecm'
+      path: '/ecm'
+      fullPath: '/admin/ecm'
+      preLoaderRoute: typeof AdminEcmRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/feature-flags': {
+      id: '/admin/feature-flags'
+      path: '/feature-flags'
+      fullPath: '/admin/feature-flags'
+      preLoaderRoute: typeof AdminFeatureFlagsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/health': {
+      id: '/admin/health'
+      path: '/health'
+      fullPath: '/admin/health'
+      preLoaderRoute: typeof AdminHealthRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/integrations': {
+      id: '/admin/integrations'
+      path: '/integrations'
+      fullPath: '/admin/integrations'
+      preLoaderRoute: typeof AdminIntegrationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/jobs': {
+      id: '/admin/jobs'
+      path: '/jobs'
+      fullPath: '/admin/jobs'
+      preLoaderRoute: typeof AdminJobsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/roles': {
+      id: '/admin/roles'
+      path: '/roles'
+      fullPath: '/admin/roles'
+      preLoaderRoute: typeof AdminRolesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/storage': {
+      id: '/admin/storage'
+      path: '/storage'
+      fullPath: '/admin/storage'
+      preLoaderRoute: typeof AdminStorageRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/tenants': {
+      id: '/admin/tenants'
+      path: '/tenants'
+      fullPath: '/admin/tenants'
+      preLoaderRoute: typeof AdminTenantsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/webhooks': {
+      id: '/admin/webhooks'
+      path: '/webhooks'
+      fullPath: '/admin/webhooks'
+      preLoaderRoute: typeof AdminWebhooksRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/workspaces': {
+      id: '/admin/workspaces'
+      path: '/workspaces'
+      fullPath: '/admin/workspaces'
+      preLoaderRoute: typeof AdminWorkspacesRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/fill/$formId': {
       id: '/fill/$formId'
@@ -277,6 +669,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HealthReadyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pdf/documents': {
+      id: '/pdf/documents'
+      path: '/pdf/documents'
+      fullPath: '/pdf/documents'
+      preLoaderRoute: typeof PdfDocumentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/studio/$formId': {
       id: '/studio/$formId'
       path: '/studio/$formId'
@@ -284,11 +683,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioFormIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/$': {
+      id: '/api/admin/$'
+      path: '/api/admin/$'
+      fullPath: '/api/admin/$'
+      preLoaderRoute: typeof ApiAdminSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/hooks/deliver': {
       id: '/api/hooks/deliver'
       path: '/api/hooks/deliver'
       fullPath: '/api/hooks/deliver'
       preLoaderRoute: typeof ApiHooksDeliverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/platform/$': {
+      id: '/api/platform/$'
+      path: '/api/platform/$'
+      fullPath: '/api/platform/$'
+      preLoaderRoute: typeof ApiPlatformSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/storage/put': {
@@ -305,6 +718,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiStorageTestRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/workflows/$workflowId/editor': {
+      id: '/workflows/$workflowId/editor'
+      path: '/workflows/$workflowId/editor'
+      fullPath: '/workflows/$workflowId/editor'
+      preLoaderRoute: typeof WorkflowsWorkflowIdEditorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/$': {
       id: '/api/agent/v1/$'
       path: '/api/agent/v1/$'
@@ -312,24 +732,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1SplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pdf/templates/$templateId/editor': {
+      id: '/pdf/templates/$templateId/editor'
+      path: '/pdf/templates/$templateId/editor'
+      fullPath: '/pdf/templates/$templateId/editor'
+      preLoaderRoute: typeof PdfTemplatesTemplateIdEditorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface AdminRouteChildren {
+  AdminAiRoute: typeof AdminAiRoute
+  AdminApiClientsRoute: typeof AdminApiClientsRoute
+  AdminAuditRoute: typeof AdminAuditRoute
+  AdminEcmRoute: typeof AdminEcmRoute
+  AdminFeatureFlagsRoute: typeof AdminFeatureFlagsRoute
+  AdminHealthRoute: typeof AdminHealthRoute
+  AdminIntegrationsRoute: typeof AdminIntegrationsRoute
+  AdminJobsRoute: typeof AdminJobsRoute
+  AdminRolesRoute: typeof AdminRolesRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminStorageRoute: typeof AdminStorageRoute
+  AdminTenantsRoute: typeof AdminTenantsRoute
+  AdminUsersRoute: typeof AdminUsersRoute
+  AdminWebhooksRoute: typeof AdminWebhooksRoute
+  AdminWorkspacesRoute: typeof AdminWorkspacesRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAiRoute: AdminAiRoute,
+  AdminApiClientsRoute: AdminApiClientsRoute,
+  AdminAuditRoute: AdminAuditRoute,
+  AdminEcmRoute: AdminEcmRoute,
+  AdminFeatureFlagsRoute: AdminFeatureFlagsRoute,
+  AdminHealthRoute: AdminHealthRoute,
+  AdminIntegrationsRoute: AdminIntegrationsRoute,
+  AdminJobsRoute: AdminJobsRoute,
+  AdminRolesRoute: AdminRolesRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminStorageRoute: AdminStorageRoute,
+  AdminTenantsRoute: AdminTenantsRoute,
+  AdminUsersRoute: AdminUsersRoute,
+  AdminWebhooksRoute: AdminWebhooksRoute,
+  AdminWorkspacesRoute: AdminWorkspacesRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   AgentRoute: AgentRoute,
+  DatasourcesRoute: DatasourcesRoute,
   DeveloperRoute: DeveloperRoute,
   InboxRoute: InboxRoute,
   ReferenceRoute: ReferenceRoute,
+  SearchRoute: SearchRoute,
   FillFormIdRoute: FillFormIdRoute,
   HealthLiveRoute: HealthLiveRoute,
   HealthReadyRoute: HealthReadyRoute,
+  PdfDocumentsRoute: PdfDocumentsRoute,
   StudioFormIdRoute: StudioFormIdRoute,
+  ApiAdminSplatRoute: ApiAdminSplatRoute,
   ApiHooksDeliverRoute: ApiHooksDeliverRoute,
+  ApiPlatformSplatRoute: ApiPlatformSplatRoute,
   ApiStoragePutRoute: ApiStoragePutRoute,
   ApiStorageTestRoute: ApiStorageTestRoute,
+  WorkflowsWorkflowIdEditorRoute: WorkflowsWorkflowIdEditorRoute,
   ApiAgentV1SplatRoute: ApiAgentV1SplatRoute,
+  PdfTemplatesTemplateIdEditorRoute: PdfTemplatesTemplateIdEditorRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PDFDocument } from "pdf-lib";
-import { defaultPlacement, exportOverlays, formatPdfValue, importOverlayList, overlayToPlacement, placementToOverlay, renderFormPdf, sampleSubmission } from "./pdf-layout.ts";
+import { defaultPlacement, exportOverlays, formatPdfValue, importOverlayList, overlayToPlacement, parseHex, placementToOverlay, renderFormPdf, sampleSubmission } from "./pdf-layout.ts";
 import type { FormComponent } from "./types.ts";
 
 function field(partial: Partial<FormComponent> & Pick<FormComponent, "type" | "key">): FormComponent {
@@ -43,6 +43,20 @@ test("filled PDF downloads as a real document with the sample value", async () =
   const imported = importOverlayList({ components: overlays });
   assert.equal(imported.length, 3);
   assert.equal(imported[0]?.key, "legalName");
+});
+
+test("accent colors parse and a styled record still builds", async () => {
+  assert.deepEqual(parseHex("#1c3d36"), { r: 28 / 255, g: 61 / 255, b: 54 / 255 });
+  assert.equal(parseHex("nope").r, 0.11);
+  const bytes = await renderFormPdf({
+    title: "Styled",
+    pageCount: 1,
+    components: [field({ type: "textfield", key: "name", label: "Name", pdf: defaultPlacement(0) })],
+    data: { name: "Ada" },
+    mode: "filled",
+    theme: { accent: "#1c3d36", columns: 2, zebra: true, header: true, border: "underline" },
+  });
+  assert.equal(String.fromCharCode(...bytes.slice(0, 5)), "%PDF-");
 });
 
 test("a PDF with no placements still downloads", async () => {

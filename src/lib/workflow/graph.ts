@@ -96,6 +96,25 @@ export function validateWorkflow(def: WorkflowDef | undefined): GraphIssue[] {
   return issues;
 }
 
+export function traceWorkflow(def: WorkflowDef, outcome: "approved" | "rejected"): string[] {
+  const start = def.nodes.find((node) => node.type === "start");
+  if (!start) return [];
+  const path = [start.id];
+  const seen = new Set<string>([start.id]);
+  let current = start.id;
+  while (path.length < 24) {
+    const edges = def.edges.filter((edge) => edge.from === current);
+    const next = edges.find((edge) => !edge.when || edge.when === outcome) ?? edges[0];
+    if (!next || seen.has(next.to)) break;
+    seen.add(next.to);
+    path.push(next.to);
+    const node = def.nodes.find((item) => item.id === next.to);
+    if (!node || node.type === "end") break;
+    current = next.to;
+  }
+  return path;
+}
+
 export function workflowOk(def: WorkflowDef | undefined): boolean {
   return validateWorkflow(def).length === 0;
 }

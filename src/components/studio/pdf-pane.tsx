@@ -5,6 +5,7 @@ import { Button, Input } from "@/components/ui/primitives";
 import { clearPdfBackground, loadPdfBackground, savePdfBackground } from "@/lib/forms/pdf-background";
 import { downloadBytes } from "@/lib/forms/pdf";
 import {
+  DEFAULT_PDF_THEME,
   defaultPlacement,
   exportOverlays,
   formatPdfValue,
@@ -14,7 +15,7 @@ import {
   withPdfPlacement,
 } from "@/lib/forms/pdf-layout";
 import { flattenInputs, updateComponent } from "@/lib/forms/tree";
-import type { FormComponent, FormDefinition, PdfPlacement } from "@/lib/forms/types";
+import type { FormComponent, FormDefinition, PdfPlacement, PdfTheme } from "@/lib/forms/types";
 
 function pdfBlob(bytes: Uint8Array) {
   const copy = new Uint8Array(bytes.byteLength);
@@ -111,6 +112,14 @@ export function PdfPane({
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  function setTheme(patch: Partial<PdfTheme>) {
+    const pdf = form.settings.pdf ?? {};
+    const theme = { ...DEFAULT_PDF_THEME, ...pdf.theme, ...patch };
+    onForm({ settings: { ...form.settings, pdf: { ...pdf, theme } } });
+  }
+
+  const theme = { ...DEFAULT_PDF_THEME, ...form.settings.pdf?.theme };
+
   function commitPlacement(component: FormComponent, pdf: PdfPlacement | undefined) {
     onComponents(updateComponent(form.components, component.id, withPdfPlacement(component, pdf)), true);
     if (!pdf) setSelectedId(null);
@@ -141,6 +150,7 @@ export function PdfPane({
       background,
       mode,
       appendRecord: mode === "filled",
+      theme: form.settings.pdf?.theme,
     });
     return bytes;
   }
@@ -456,6 +466,29 @@ export function PdfPane({
               </div>
             </div>
           ) : <p className="text-sm text-muted">Select a box. Drag it, resize from the corner, or use the arrow keys. Delete takes it off the page.</p>}
+          <h2 className="mt-3 text-sm font-semibold">Document style</h2>
+          <label className="grid gap-1 text-xs">Accent
+            <input aria-label="Accent color" type="color" value={theme.accent} onChange={(event) => setTheme({ accent: event.target.value })} />
+          </label>
+          <label className="grid gap-1 text-xs">Field chrome
+            <select aria-label="Field border" className="h-11 rounded-md border border-line bg-elevated px-2 text-sm" value={theme.border} onChange={(event) => setTheme({ border: event.target.value as PdfTheme["border"] })}>
+              <option value="box">Box</option>
+              <option value="underline">Underline</option>
+              <option value="none">None</option>
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs">Record columns
+            <select aria-label="Record columns" className="h-11 rounded-md border border-line bg-elevated px-2 text-sm" value={theme.columns} onChange={(event) => setTheme({ columns: Number(event.target.value) === 2 ? 2 : 1 })}>
+              <option value={1}>One column</option>
+              <option value={2}>Two columns</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={theme.header} onChange={(event) => setTheme({ header: event.target.checked })} /> Colored header</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={theme.zebra} onChange={(event) => setTheme({ zebra: event.target.checked })} /> Zebra rows</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={theme.pageNumbers} onChange={(event) => setTheme({ pageNumbers: event.target.checked })} /> Page numbers</label>
+          <label className="grid gap-1 text-xs">Footer
+            <Input aria-label="Footer text" value={theme.footer} onChange={(event) => setTheme({ footer: event.target.value })} />
+          </label>
           <h2 className="mt-3 text-sm font-semibold">Sample answers</h2>
           <textarea aria-label="Sample answers JSON" className="h-40 w-full rounded-md border border-line bg-elevated p-2 font-mono text-xs" value={sampleText} onChange={(event) => setSampleText(event.target.value)} />
           {sample ? null : <p className="text-xs text-danger">Sample JSON is invalid, so the filled PDF cannot be built.</p>}

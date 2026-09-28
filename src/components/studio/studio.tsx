@@ -11,6 +11,11 @@ import { proposalFromModel, type EditProposal } from "@/lib/forms/llm";
 import { CATALOG, createComponent, GROUPS } from "@/lib/forms/catalog";
 import { PropertyInspector } from "@/components/studio/property-inspector";
 import { PdfPane } from "@/components/studio/pdf-pane";
+import { DataPane } from "@/components/studio/data-pane";
+import { JsonPane } from "@/components/studio/json-pane";
+import { LogicPane } from "@/components/studio/logic-pane";
+import { ApiPane } from "@/components/studio/api-pane";
+import { FlowPane } from "@/components/studio/flow-pane";
 import { semanticDiff } from "@/lib/forms/diff";
 import { lintForm } from "@/lib/forms/lint";
 import { toCapabilities, toJsonSchema, inputLabels } from "@/lib/forms/schema-export";
@@ -54,8 +59,6 @@ export function Studio({ formId }: { formId: string }) {
   const [future, setFuture] = useState<FormComponent[][]>([]);
   const [device, setDevice] = useState<"full" | "tablet" | "phone">("full");
   const [ink, setInk] = useState(false);
-  const [jsonText, setJsonText] = useState("");
-  const [jsonError, setJsonError] = useState("");
   const [publishOpen, setPublishOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [assistOpen, setAssistOpen] = useState(false);
@@ -74,13 +77,6 @@ export function Studio({ formId }: { formId: string }) {
     ]);
     return () => setPalette([]);
   }, [form, setPalette]);
-
-  useEffect(() => {
-    if (mode === "JSON" && form) {
-      setJsonText(JSON.stringify({ title: form.title, name: form.name, display: form.display, components: form.components, workflow: form.workflow, settings: form.settings }, null, 2));
-      setJsonError("");
-    }
-  }, [mode, form]);
 
   function commit(next: FormComponent[]) {
     if (!form) return;
@@ -365,69 +361,20 @@ export function Studio({ formId }: { formId: string }) {
       {mode === "Data" ? <DataPane form={form} /> : null}
 
       {mode === "JSON" ? (
-        <div className="min-h-0 flex-1 overflow-auto bg-paper p-4 text-paper-fg">
-          <div className="mb-3 flex flex-wrap gap-2">
-            <Button onClick={() => {
-              try {
-                const parsed = JSON.parse(jsonText) as Partial<FormDefinition>;
-                if (!Array.isArray(parsed.components)) {
-                  setJsonError("JSON needs a components array");
-                  return;
-                }
-                updateForm(form.id, (current) => ({
-                  ...current,
-                  title: typeof parsed.title === "string" ? parsed.title : current.title,
-                  display: parsed.display === "wizard" ? "wizard" : parsed.display === "form" ? "form" : current.display,
-                  components: parsed.components as FormComponent[],
-                  workflow: parsed.workflow ?? current.workflow,
-                  settings: parsed.settings ? { ...current.settings, ...parsed.settings } : current.settings,
-                }), "Updated from JSON");
-                setJsonError("");
-                toast.success("Builder updated from JSON");
-              } catch (error) {
-                setJsonError(error instanceof Error ? error.message : "Invalid JSON");
-              }
-            }}>Apply to builder</Button>
-            <Button variant="secondary" onClick={() => {
-              setJsonText(JSON.stringify({ title: form.title, name: form.name, display: form.display, components: form.components, workflow: form.workflow, settings: form.settings }, null, 2));
-              setJsonError("");
-            }}>Format</Button>
-          </div>
-          {jsonError ? <p role="alert" className="mb-2 text-sm text-danger">{jsonError}</p> : null}
-          <Textarea value={jsonText} onChange={(e) => setJsonText(e.target.value)} className="min-h-[70vh] font-mono text-xs" spellCheck={false} aria-label="Form JSON" />
-        </div>
+        <JsonPane
+          form={form}
+          onApply={(parsed) => updateForm(form.id, (current) => ({
+            ...current,
+            title: typeof parsed.title === "string" ? parsed.title : current.title,
+            display: parsed.display === "wizard" ? "wizard" : parsed.display === "form" ? "form" : current.display,
+            components: parsed.components ?? current.components,
+            workflow: parsed.workflow ?? current.workflow,
+            settings: parsed.settings ? { ...current.settings, ...parsed.settings } : current.settings,
+          }), "Updated from JSON")}
+        />
       ) : null}
 
-      {mode === "Logic" ? (
-        <div className="min-h-0 flex-1 overflow-auto bg-paper p-4 text-paper-fg">
-          <div className="mx-auto grid max-w-3xl gap-4">
-            <section className="rounded-xl border border-line bg-surface p-4">
-              <h2 className="font-semibold">Quality checks</h2>
-              <ul className="mt-3 grid gap-2">
-                {issues.length === 0 ? <li className="text-sm text-muted">No issues.</li> : null}
-                {issues.map((issue, index) => (
-                  <li key={index} className={cn("rounded-md px-3 py-2 text-sm", issue.level === "error" ? "bg-danger-bg text-danger" : "bg-warn-bg text-warn")}>
-                    {issue.level === "error" ? "Error" : "Warning"} · {issue.message}
-                  </li>
-                ))}
-              </ul>
-            </section>
-            <section className="rounded-xl border border-line bg-surface p-4">
-              <h2 className="font-semibold">Rules</h2>
-              <ul className="mt-3 grid gap-2 text-sm">
-                {flattenInputs(form.components).filter((c) => c.conditional || c.calculateValue || c.validate?.custom).map((c) => (
-                  <li key={c.id} className="rounded-md border border-line px-3 py-2 font-mono text-xs">
-                    <span className="font-sans text-sm font-medium">{c.label}</span>
-                    {c.conditional ? <p>show when {c.conditional}</p> : null}
-                    {c.calculateValue ? <p>= {c.calculateValue}</p> : null}
-                    {c.validate?.custom ? <p>valid when {c.validate.custom}</p> : null}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          </div>
-        </div>
-      ) : null}
+      {mode === "Logic" ? <LogicPane form={form} onComponents={(components) => commit(components)} /> : null}
 
       {mode === "API" ? <ApiPane form={form} /> : null}
       {mode === "PDF" ? (
@@ -912,159 +859,5 @@ function Inspector({
       siblings={form.components}
       onChange={(next) => onPatch(next)}
     />
-  );
-}
-
-function DataPane({ form }: { form: FormDefinition }) {
-  const all = useFormStore((s) => s.submissions);
-  const submissions = useMemo(() => all.filter((item) => item.formId === form.id), [all, form.id]);
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState<string | null>(null);
-  const rows = submissions.filter((item) => JSON.stringify(item.data).toLowerCase().includes(q.trim().toLowerCase()) || item.status.includes(q.trim().toLowerCase()) || item.id.includes(q.trim()));
-  const current = submissions.find((item) => item.id === open);
-  const labels = inputLabels(form).slice(0, 4);
-  return (
-    <div className="min-h-0 flex-1 overflow-auto bg-paper p-4 text-paper-fg">
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Input className="max-w-sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter submissions" aria-label="Filter submissions" />
-        <Button variant="secondary" onClick={() => {
-          const header = ["id", "status", "createdAt", ...inputLabels(form).map((l) => l.key)];
-          const lines = [header.join(",")].concat(submissions.map((item) => header.map((key) => {
-            const value = key === "id" || key === "status" || key === "createdAt" ? (item as unknown as Record<string, string>)[key] : item.data[key];
-            return `"${String(value ?? "").replace(/"/g, '""')}"`;
-          }).join(",")));
-          const blob = new Blob([lines.join("\n")], { type: "text/csv" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `${form.name}.csv`;
-          a.click();
-          URL.revokeObjectURL(url);
-        }}>Export CSV</Button>
-      </div>
-      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-        <table className="w-full min-w-[40rem] text-left text-sm">
-          <thead className="text-xs text-muted">
-            <tr>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">When</th>
-              {labels.map((label) => <th key={label.key} className="px-3 py-2">{label.label}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((item) => (
-              <tr key={item.id} className="cursor-pointer border-t border-line" onClick={() => setOpen(item.id)}>
-                <td className="px-3 py-3">{item.status.replaceAll("_", " ")}</td>
-                <td className="px-3 py-3 whitespace-nowrap">{new Date(item.createdAt).toLocaleDateString()}</td>
-                {labels.map((label) => <td key={label.key} className="max-w-40 truncate px-3 py-3">{typeof item.data[label.key] === "object" ? item.id : String(item.data[label.key] ?? "")}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {current ? (
-        <pre className="mt-4 overflow-auto rounded-xl border border-line bg-chrome p-4 font-mono text-xs text-chrome-fg">{JSON.stringify({ id: current.id, status: current.status, data: current.data, workflow: current.workflow, documents: current.documents }, null, 2)}</pre>
-      ) : null}
-    </div>
-  );
-}
-
-function ApiPane({ form }: { form: FormDefinition }) {
-  const [payload, setPayload] = useState("{\n  \n}");
-  const [result, setResult] = useState("");
-  const submit = useFormStore((s) => s.submit);
-  const schema = useMemo(() => toJsonSchema(form), [form]);
-  const caps = useMemo(() => toCapabilities(form), [form]);
-  return (
-    <div className="min-h-0 flex-1 overflow-auto bg-paper p-4 text-paper-fg">
-      <div className="mx-auto grid max-w-4xl gap-4">
-        <p className="text-sm text-muted">This is the same contract an agent gateway exposes. Running it here writes a real workspace submission. It does not call a remote URL.</p>
-        <section>
-          <h2 className="mb-2 font-semibold">Capabilities</h2>
-          <pre className="overflow-auto rounded-xl bg-chrome p-4 font-mono text-xs text-chrome-fg">{JSON.stringify(caps, null, 2)}</pre>
-        </section>
-        <section>
-          <h2 className="mb-2 font-semibold">Input schema</h2>
-          <pre className="max-h-80 overflow-auto rounded-xl bg-chrome p-4 font-mono text-xs text-chrome-fg">{JSON.stringify(schema, null, 2)}</pre>
-        </section>
-        <section className="grid gap-2">
-          <h2 className="font-semibold">Validate and submit object</h2>
-          <Textarea value={payload} onChange={(e) => setPayload(e.target.value)} className="min-h-40 font-mono text-xs" aria-label="Submission object" />
-          <div className="flex gap-2">
-            <Button onClick={() => {
-              void (async () => {
-                try {
-                  const data = JSON.parse(payload) as Record<string, unknown>;
-                  const response = await submit({ formId: form.id, data, actor: "agent", source: "agent", idempotencyKey: `agent_${Date.now().toString(36)}` });
-                  setResult(JSON.stringify(response.ok ? { submissionId: response.submission?.id, status: response.submission?.status, workflow: response.submission?.workflow } : { error: { code: response.code, message: response.message, details: response.errors } }, null, 2));
-                } catch (error) {
-                  setResult(error instanceof Error ? error.message : "Invalid JSON");
-                }
-              })();
-            }}>Submit object</Button>
-          </div>
-          {result ? <pre className="overflow-auto rounded-xl border border-line p-3 font-mono text-xs">{result}</pre> : null}
-        </section>
-      </div>
-    </div>
-  );
-}
-
-function FlowPane({ form, onChange }: { form: FormDefinition; onChange: (workflow: FormDefinition["workflow"]) => void }) {
-  const flow = form.workflow;
-  const [title, setTitle] = useState("Compliance review");
-  const [role, setRole] = useState("Compliance");
-  if (!flow) {
-    return (
-      <div className="bg-paper p-6 text-paper-fg">
-        <p className="mb-3 text-sm text-muted">No business workflow yet. Form navigation and approval are separate.</p>
-        <Button onClick={() => onChange({
-          nodes: [
-            { id: "start", type: "start", title: "Submitted" },
-            { id: "review", type: "human", title: "Review", role: "Reviewer" },
-            { id: "done", type: "end", title: "Approved" },
-            { id: "rejected", type: "end", title: "Rejected" },
-          ],
-          edges: [
-            { from: "start", to: "review", when: "approved" },
-            { from: "review", to: "done", when: "approved" },
-            { from: "review", to: "rejected", when: "rejected" },
-          ],
-        })}>Add a review step</Button>
-      </div>
-    );
-  }
-  return (
-    <div className="min-h-0 flex-1 overflow-auto bg-paper p-4 text-paper-fg">
-      <ol className="mx-auto grid max-w-xl gap-2">
-        {flow.nodes.map((node) => (
-          <li key={node.id} className="rounded-lg border border-line bg-surface px-4 py-3">
-            <p className="text-xs text-muted">{node.type}{node.role ? ` · ${node.role}` : ""}{node.service ? ` · ${node.service}` : ""}</p>
-            <p className="font-medium">{node.title}</p>
-          </li>
-        ))}
-      </ol>
-      <div className="mx-auto mt-4 grid max-w-xl gap-2 sm:grid-cols-[1fr_1fr_auto]">
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Step title" />
-        <Input value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role" />
-        <Button onClick={() => {
-          const id = uniqueKey(title || "step", new Set(flow.nodes.map((n) => n.id)));
-          const humans = flow.nodes.filter((n) => n.type === "human" || n.type === "approval");
-          const lastHuman = humans[humans.length - 1];
-          const node = { id, type: "human" as const, title: title || "Review", role };
-          const edges = flow.edges.map((edge) => (lastHuman && edge.from === lastHuman.id && edge.when === "approved" ? { ...edge, from: id } : edge));
-          if (lastHuman) edges.push({ from: lastHuman.id, to: id, when: "approved" });
-          edges.push({ from: id, to: "rejected", when: "rejected" });
-          onChange({ nodes: [...flow.nodes.filter((n) => n.type !== "end"), node, ...flow.nodes.filter((n) => n.type === "end")], edges });
-        }}>Add step</Button>
-        <Button variant="secondary" onClick={() => {
-          const id = uniqueKey("store", new Set(flow.nodes.map((n) => n.id)));
-          onChange({
-            nodes: [...flow.nodes.filter((n) => n.type !== "end"), { id, type: "service", title: "Store document", service: "archive" }, ...flow.nodes.filter((n) => n.type === "end")],
-            edges: [...flow.edges, { from: flow.nodes.filter((n) => n.type !== "end").at(-1)?.id || "start", to: id, when: "approved" }],
-          });
-        }}>Add storage step</Button>
-      </div>
-    </div>
   );
 }

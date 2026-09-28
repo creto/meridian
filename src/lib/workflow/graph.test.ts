@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { WorkflowDef } from "../forms/types.ts";
-import { validateWorkflow } from "./graph.ts";
+import { traceWorkflow, validateWorkflow } from "./graph.ts";
 
 const sound: WorkflowDef = {
   nodes: [
@@ -45,4 +45,22 @@ test("unreachable nodes, private urls and n-of-m joins are rejected", () => {
   assert.ok(codes.includes("SSRF"));
   assert.ok(codes.includes("JOIN_COUNT"));
   assert.ok(codes.includes("UNREACHABLE"));
+});
+
+test("an approved trace follows the approved edge and stops at the end", () => {
+  const flow: WorkflowDef = {
+    nodes: [
+      { id: "start", type: "start", title: "Submitted" },
+      { id: "review", type: "human", title: "Review" },
+      { id: "done", type: "end", title: "Approved" },
+      { id: "rejected", type: "end", title: "Rejected" },
+    ],
+    edges: [
+      { from: "start", to: "review", when: "approved" },
+      { from: "review", to: "done", when: "approved" },
+      { from: "review", to: "rejected", when: "rejected" },
+    ],
+  };
+  assert.deepEqual(traceWorkflow(flow, "approved"), ["start", "review", "done"]);
+  assert.deepEqual(traceWorkflow(flow, "rejected"), ["start", "review", "rejected"]);
 });

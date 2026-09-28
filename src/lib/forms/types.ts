@@ -62,6 +62,16 @@ export interface ValidateSpec {
 
 export type PdfAlign = "left" | "center" | "right";
 
+export interface PdfTheme {
+  accent: string;
+  border: "box" | "underline" | "none";
+  zebra: boolean;
+  pageNumbers: boolean;
+  header: boolean;
+  footer: string;
+  columns: 1 | 2;
+}
+
 export interface PdfPlacement {
   page: number;
   /** Percent of the page, origin top-left. */
@@ -152,6 +162,7 @@ export interface FormSettings {
   pdf?: {
     fileName?: string;
     pageCount?: number;
+    theme?: PdfTheme;
   };
 }
 

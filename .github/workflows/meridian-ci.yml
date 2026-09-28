@@ -1,0 +1,22 @@
+name: meridian-ci
+
+on:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: install
+        run: npm ci
+      - name: typecheck
+        run: npm run typecheck
+      - name: test
+        run: node --experimental-strip-types --test src/lib/i18n/catalog.test.ts src/lib/retention/jobs.test.ts src/lib/security/scan.test.ts
+      # e2e/playwright is not wired

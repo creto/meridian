@@ -21,6 +21,61 @@ function childLists(component: FormComponent): FormComponent[][] {
   return lists;
 }
 
+function structuralKeys(list: FormComponent[]): Set<string> {
+  const keys = new Set<string>();
+  const walk = (items: FormComponent[]) => {
+    for (const component of items) {
+      if (component.type === "datagrid" || component.type === "container") keys.add(component.key);
+      if (isLayout(component) || component.type === "columns" || component.type === "panel" || component.type === "fieldset" || component.type === "tabs") {
+        childLists(component).forEach(walk);
+      }
+    }
+  };
+  walk(list);
+  return keys;
+}
+
+function calculatedIn(list: FormComponent[]): FormComponent[] {
+  const fields: FormComponent[] = [];
+  const visit = (items: FormComponent[]) => {
+    for (const component of items) {
+      if (component.type === "datagrid" || component.type === "container") continue;
+      if (component.calculateValue) fields.push(component);
+      if (isLayout(component) || component.type === "columns" || component.type === "panel" || component.type === "fieldset" || component.type === "tabs") {
+        childLists(component).forEach(visit);
+      }
+    }
+  };
+  visit(list);
+  return fields;
+}
+
+/** Dependencies first. A cycle is skipped rather than evaluated forever. */
+function calculationOrder(fields: FormComponent[]): FormComponent[] {
+  const keys = new Set(fields.map((field) => field.key));
+  const byKey = new Map(fields.map((field) => [field.key, field]));
+  const deps = new Map(
+    fields.map((field) => [
+      field.key,
+      referencedKeys(field.calculateValue ?? "").filter((key) => keys.has(key) && key !== field.key),
+    ]),
+  );
+  const ordered: FormComponent[] = [];
+  const done = new Set<string>();
+  const visiting = new Set<string>();
+  const walk = (key: string) => {
+    if (done.has(key) || visiting.has(key)) return;
+    visiting.add(key);
+    for (const dep of deps.get(key) ?? []) walk(dep);
+    visiting.delete(key);
+    done.add(key);
+    const field = byKey.get(key);
+    if (field) ordered.push(field);
+  };
+  for (const field of fields) walk(field.key);
+  return ordered;
+}
+
 export function applyCalculations(components: FormComponent[], data: Record<string, unknown>): Record<string, unknown> {
   const next: Record<string, unknown> = { ...data };
   const runField = (component: FormComponent, target: Record<string, unknown>, rowScope?: Record<string, unknown>, rows?: unknown[]) => {
@@ -38,19 +93,17 @@ export function applyCalculations(components: FormComponent[], data: Record<stri
     if (result.ok) target[component.key] = result.value ?? "";
   };
 
-  for (let pass = 0; pass < 4; pass += 1) {
-    const visit = (list: FormComponent[], target: Record<string, unknown>, rows?: unknown[]) => {
-      for (const component of list) {
+  const visit = (list: FormComponent[], target: Record<string, unknown>) => {
+    const walkNodes = (items: FormComponent[]) => {
+      for (const component of items) {
         if (component.type === "datagrid") {
           const rowsValue = Array.isArray(target[component.key]) ? (target[component.key] as Record<string, unknown>[]) : [];
-          const computed = rowsValue.map((row) => {
+          const columns = calculationOrder((component.components ?? []).filter((column) => column.calculateValue));
+          target[component.key] = rowsValue.map((row) => {
             const copy = { ...row };
-            for (let i = 0; i < 3; i += 1) {
-              for (const col of component.components ?? []) runField(col, copy, { row: copy, ...copy }, rowsValue);
-            }
+            for (const column of columns) runField(column, copy, { row: copy, ...copy }, rowsValue);
             return copy;
           });
-          target[component.key] = computed;
           continue;
         }
         if (component.type === "container") {
@@ -63,14 +116,20 @@ export function applyCalculations(components: FormComponent[], data: Record<stri
           continue;
         }
         if (isLayout(component) || component.type === "columns" || component.type === "panel" || component.type === "fieldset" || component.type === "tabs") {
-          childLists(component).forEach((children) => visit(children, target, rows));
-          continue;
+          childLists(component).forEach(walkNodes);
         }
-        runField(component, target, undefined, rows);
       }
     };
-    visit(components, next);
-  }
+    const structures = structuralKeys(list);
+    const ordered = calculationOrder(calculatedIn(list));
+    const upstream = ordered.filter((field) => !referencedKeys(field.calculateValue ?? "").some((key) => structures.has(key)));
+    const downstream = ordered.filter((field) => referencedKeys(field.calculateValue ?? "").some((key) => structures.has(key)));
+    for (const field of upstream) runField(field, target);
+    // Grids and containers read upstream values, then parent formulas read the grids.
+    walkNodes(list);
+    for (const field of downstream) runField(field, target);
+  };
+  visit(components, next);
   return next;
 }
 

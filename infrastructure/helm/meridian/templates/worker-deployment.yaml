@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-worker
+  labels:
+    app: meridian
+    component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      app: meridian
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: meridian
+        component: worker
+    spec:
+      # Worker has no Service. It is not reachable outside the namespace.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["node", "scripts/worker.mjs"]
+          envFrom:
+            - secretRef:
+                name: {{ .Values.envFromSecret }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            # Writable root is for temp files only. Postgres data is not in these pods.
+            readOnlyRootFilesystem: false
+          readinessProbe:
+            httpGet:
+              path: /api/agent/v1/health/live
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/agent/v1/health/live
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20

@@ -9,9 +9,16 @@ import type { FormDefinition, Submission } from "../forms/types.ts";
 import { mutateSnapshot, readSnapshot, writeSnapshot, type WorkspaceSnapshot } from "./snapshot.ts";
 import { bootPlatform, persistSnapshot, sameWorkspace } from "./durable-server.ts";
 import { workspaceHash } from "./durable.ts";
+import { getSql, withTransaction } from "../db.ts";
+import { WORKSPACE_TENANT } from "../domain/workspace-store.ts";
+import { completeWorkflowTask, publishForm } from "../domain/commands.ts";
+import { authorize } from "../authz/authorize.ts";
+import { authenticatePresentedKey } from "./api-keys.ts";
+import type { WorkspaceRole } from "./rbac.ts";
+import { applySecurityHeaders } from "../security/http.ts";
 
 function json(body: unknown, status = 200) {
-  return Response.json(body, { status });
+  return applySecurityHeaders(Response.json(body, { status }));
 }
 
 async function commit(snap: WorkspaceSnapshot): Promise<WorkspaceSnapshot> {
@@ -62,6 +69,23 @@ export async function handleAgent(method: string, path: string, request: Request
   await resumeTimers();
   await ensureSeed();
   const parts = path.split("/").filter(Boolean);
+  let tenantId = WORKSPACE_TENANT;
+  let role: WorkspaceRole = "owner";
+  const bearer = request.headers.get("authorization");
+  if (bearer?.toLowerCase().startsWith("bearer ")) {
+    try {
+      const sql = await getSql();
+      const auth = await authenticatePresentedKey(sql, bearer.slice(7).trim());
+      if (!auth) return json({ error: { code: "UNAUTHORIZED", message: "API key was rejected" } }, 401);
+      tenantId = auth.tenantId;
+      const known: WorkspaceRole[] = ["owner", "designer", "clerk", "reviewer", "agent", "viewer"];
+      role = known.includes(auth.role as WorkspaceRole) ? (auth.role as WorkspaceRole) : "agent";
+    } catch (error) {
+      return json({ error: { code: "UNAUTHORIZED", message: error instanceof Error ? error.message : "API key check failed" } }, 401);
+    }
+  }
+  const allow = (action: Parameters<typeof authorize>[0]["action"], type: string, id?: string) =>
+    authorize({ actor: { tenantId, userId: "api", role }, action, resource: { tenantId, type, id } });
   if (method === "GET" && parts[0] === "health" && parts[1] === "live") return json({ ok: true, status: "live" });
   if (method === "GET" && parts[0] === "health" && parts[1] === "ready") return json({ ok: true, status: "ready", persistence: "postgresql" });
   if (method === "POST" && parts[0] === "sync") {
@@ -171,6 +195,49 @@ export async function handleAgent(method: string, path: string, request: Request
     }));
     await commit(readSnapshot());
     return updated ? json(updated) : json({ error: { code: "NOT_FOUND", message: "Submission not found" } }, 404);
+  }
+  if (method === "POST" && parts[0] === "forms" && parts[2] === "publish") {
+    const form = findForm(parts[1] ?? "");
+    if (!form) return json({ error: { code: "NOT_FOUND", message: "Form not found" } }, 404);
+    const decision = allow("form.publish", "form", form.id);
+    if (!decision.allow) return json({ error: { code: "FORBIDDEN", message: decision.reason } }, 403);
+    const result = await withTransaction((sql) => publishForm(sql, tenantId, form, role, "Published from the agent API"));
+    return json(result, result.ok ? 200 : 422);
+  }
+  if (method === "POST" && parts[0] === "workflows" && parts[1] === "tasks" && parts[3] === "complete") {
+    const decision = allow("workflow.task.complete", "task", parts[2]);
+    if (!decision.allow) return json({ error: { code: "FORBIDDEN", message: decision.reason } }, 403);
+    const body = (await request.json()) as { decision?: "approve" | "reject" | "changes"; comment?: string };
+    if (!body.decision) return json({ error: { code: "BAD_REQUEST", message: "decision is required" } }, 400);
+    const result = await withTransaction((sql) => completeWorkflowTask(sql, tenantId, { taskId: parts[2] ?? "", actor: role, decision: body.decision ?? "approve", comment: body.comment }));
+    return json(result, result.ok ? 200 : result.code === "NOT_FOUND" ? 404 : 409);
+  }
+  if (parts[0] === "jobs") {
+    const decision = allow("workflow.read", "job", parts[1]);
+    if (!decision.allow) return json({ error: { code: "FORBIDDEN", message: decision.reason } }, 403);
+    const sql = await getSql();
+    if (method === "GET" && !parts[1]) {
+      const jobs = await sql.query("select id, queue, status, attempts, run_at from jobs where tenant_id = $1 order by created_at desc limit 50", [tenantId]);
+      return json({ jobs });
+    }
+    if (method === "GET" && parts[1] && !parts[2]) {
+      const rows = await sql.query("select id, queue, status, attempts, last_error, payload from jobs where tenant_id = $1 and id = $2", [tenantId, parts[1]]);
+      return rows[0] ? json(rows[0]) : json({ error: { code: "NOT_FOUND", message: "Job not found" } }, 404);
+    }
+    if (method === "POST" && parts[2] === "retry") {
+      const rows = await sql.query(
+        "update jobs set status = 'queued', run_at = now(), updated_at = now() where tenant_id = $1 and id = $2 and status = 'dead' returning id",
+        [tenantId, parts[1]],
+      );
+      return rows[0] ? json({ ok: true }) : json({ error: { code: "NOT_FOUND", message: "No dead job with that id" } }, 404);
+    }
+    if (method === "POST" && parts[2] === "cancel") {
+      const rows = await sql.query(
+        "update jobs set status = 'cancelled', updated_at = now() where tenant_id = $1 and id = $2 and status in ('queued', 'retry') returning id",
+        [tenantId, parts[1]],
+      );
+      return rows[0] ? json({ ok: true }) : json({ error: { code: "NOT_FOUND", message: "Job is not cancellable" } }, 404);
+    }
   }
   return json({ error: { code: "NOT_FOUND", message: `No agent route for ${method} /${path}` } }, 404);
 }

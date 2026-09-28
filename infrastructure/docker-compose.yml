@@ -1,0 +1,123 @@
+# Local deploy sketch for Meridian. This is not a claim that a cluster is running.
+# Web and worker images are expected to drop to a non-root user (uid 10001).
+# Do not add privileged: true. Postgres data lives only on the postgres service.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-meridian}
+      POSTGRES_DB: meridian
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian -d meridian"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-meridian}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-meridian}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  migrate:
+    image: ${MERIDIAN_IMAGE:-meridian:local}
+    command: ["node", "scripts/migrate.mjs"]
+    environment:
+      DATABASE_URL: postgres://meridian:${POSTGRES_PASSWORD:-meridian}@postgres:5432/meridian
+      MERIDIAN_MASTER_KEY: ${MERIDIAN_MASTER_KEY:?set MERIDIAN_MASTER_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    image: ${MERIDIAN_IMAGE:-meridian:local}
+    # Non-root: the image should run as uid 10001, not the container root user.
+    environment:
+      DATABASE_URL: postgres://meridian:${POSTGRES_PASSWORD:-meridian}@postgres:5432/meridian
+      REDIS_URL: redis://redis:6379
+      MERIDIAN_MASTER_KEY: ${MERIDIAN_MASTER_KEY:?set MERIDIAN_MASTER_KEY}
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: meridian
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-meridian}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-meridian}
+      S3_REGION: us-east-1
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/api/agent/v1/health/live').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  worker:
+    image: ${MERIDIAN_IMAGE:-meridian:local}
+    # Non-root worker process. No host port is published.
+    command: ["node", "scripts/worker.mjs"]
+    environment:
+      DATABASE_URL: postgres://meridian:${POSTGRES_PASSWORD:-meridian}@postgres:5432/meridian
+      REDIS_URL: redis://redis:6379
+      MERIDIAN_MASTER_KEY: ${MERIDIAN_MASTER_KEY:?set MERIDIAN_MASTER_KEY}
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: meridian
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-meridian}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-meridian}
+      S3_REGION: us-east-1
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/api/agent/v1/health/live').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+volumes:
+  pgdata:
+  miniodata:

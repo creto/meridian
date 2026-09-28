@@ -1,0 +1,72 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { endSpan, formatLog, startSpan, startTrace } from "./trace.ts";
+
+test("traces, spans, and logs keep ids and redact secrets", () => {
+  const trace = startTrace({ tenantId: "ten_a", requestId: "req_fixed" });
+  const other = startTrace();
+  assert.equal(trace.tenantId, "ten_a");
+  assert.equal(trace.requestId, "req_fixed");
+  assert.match(trace.traceId, /^[0-9a-f]{32}$/);
+  assert.match(other.requestId, /^[0-9a-f]{16}$/);
+  assert.notEqual(trace.traceId, other.traceId);
+  assert.equal(other.tenantId, undefined);
+
+  const attrs = { password: "hunter2", apiKey: "live", api_key: "live2", query: "select 1", nested: { authorization: "Bearer x", ok: true } };
+  const span = startSpan(trace, "http", attrs);
+  attrs.password = "changed";
+  assert.match(span.spanId, /^[0-9a-f]{16}$/);
+  assert.equal(span.parentSpanId, undefined);
+  assert.equal(span.traceId, trace.traceId);
+  assert.equal(span.requestId, "req_fixed");
+  assert.equal(span.tenantId, "ten_a");
+  assert.equal(span.name, "http");
+  assert.equal(typeof span.startMs, "number");
+  assert.equal(span.attrs.password, "***");
+  assert.equal(span.attrs.apiKey, "***");
+  assert.equal(span.attrs.api_key, "***");
+  assert.equal(span.attrs.query, "select 1");
+  assert.equal((span.attrs.nested as { authorization: string; ok: boolean }).authorization, "***");
+  assert.equal((span.attrs.nested as { ok: boolean }).ok, true);
+  assert.equal(JSON.stringify(span).includes("hunter2"), false);
+  assert.equal(attrs.password, "changed");
+
+  const child = startSpan(span, "db", { token: "abc", secret: "s3" });
+  assert.equal(child.parentSpanId, span.spanId);
+  assert.equal(child.traceId, trace.traceId);
+  assert.notEqual(child.spanId, span.spanId);
+  assert.equal(child.attrs.token, "***");
+  assert.equal(child.attrs.secret, "***");
+
+  const ended = endSpan(child, { Password: "nope", rows: 3 });
+  assert.equal(ended, child);
+  assert.equal(typeof ended.endMs, "number");
+  assert.ok((ended.endMs ?? 0) >= child.startMs);
+  assert.equal(ended.durationMs, (ended.endMs ?? 0) - child.startMs);
+  assert.ok((ended.durationMs ?? -1) >= 0);
+  assert.equal(ended.attrs.Password, "***");
+  assert.equal(ended.attrs.rows, 3);
+
+  const line = formatLog(ended, "info", "request.done", { status: 200, apiKey: "should-hide", note: "kept" });
+  assert.equal(line.includes("\n"), false);
+  const parsed = JSON.parse(line) as Record<string, unknown>;
+  assert.equal(parsed.timestamp !== undefined && typeof parsed.timestamp === "string", true);
+  assert.equal(parsed.level, "info");
+  assert.equal(parsed.service, "meridian");
+  assert.equal(parsed.tenantId, "ten_a");
+  assert.equal(parsed.requestId, "req_fixed");
+  assert.equal(parsed.traceId, trace.traceId);
+  assert.equal(parsed.spanId, child.spanId);
+  assert.equal(parsed.parentSpanId, span.spanId);
+  assert.equal(parsed.event, "request.done");
+  assert.equal(parsed.status, 200);
+  assert.equal(parsed.note, "kept");
+  assert.equal(parsed.apiKey, "***");
+  assert.equal(parsed.token, "***");
+  assert.equal(parsed.secret, "***");
+  assert.equal(parsed.Password, "***");
+  assert.equal(parsed.rows, 3);
+  assert.equal(line.includes("should-hide"), false);
+  assert.equal(line.includes("hunter2"), false);
+  assert.equal(line.includes("nope"), false);
+});

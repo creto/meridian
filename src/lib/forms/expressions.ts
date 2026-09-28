@@ -401,7 +401,10 @@ function evalCall(name: string, args: Ast[], scope: Record<string, unknown>): un
 export function compileExpression(input: string): { ok: true; ast: Ast } | EvalErr {
   try {
     if (!input.trim()) return { ok: false, error: "Expression is empty" };
-    const ast = new Parser(tokenize(input)).parse();
+    if (input.length > 4_000) return { ok: false, error: "Expression is too long" };
+    const tokens = tokenize(input);
+    if (tokens.length > 400) return { ok: false, error: "Expression is too complex" };
+    const ast = new Parser(tokens).parse();
     return { ok: true, ast };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Invalid expression" };

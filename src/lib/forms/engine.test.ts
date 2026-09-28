@@ -8,6 +8,17 @@ import { importWorkbook } from "./spreadsheet.ts";
 import { buildPdf } from "./pdf.ts";
 import { supplierForm } from "./templates.ts";
 
+test("calculated fields follow dependencies, not tree order", () => {
+  const components = [
+    { id: "q", type: "number" as const, key: "quantity", label: "Quantity" },
+    { id: "t", type: "number" as const, key: "total", label: "Total", calculateValue: "extended * 2" },
+    { id: "e", type: "number" as const, key: "extended", label: "Extended", calculateValue: "quantity * 5" },
+  ];
+  const data = applyCalculations(components, { quantity: 4, total: 0, extended: 0 });
+  assert.equal(data.extended, 20);
+  assert.equal(data.total, 40);
+});
+
 test("expressions compare, calculate, and aggregate", () => {
   const scope = {
     supplierType: "colombian_company",

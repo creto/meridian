@@ -46,9 +46,11 @@ export interface Sql {
  */
 const globalRef = globalThis as typeof globalThis & {
   __pgSqlPromise__?: Promise<Sql>;
+  __pgPool__?: import("pg").Pool;
   __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite>;
   __pgliteMigrateChain__?: Promise<void>;
   __pgliteBlocked__?: boolean;
+  __txChain__?: Promise<unknown>;
 };
 
 function rememberPgliteFailure(err: unknown) {
@@ -101,6 +103,7 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
     const pool = new Pool({ connectionString: databaseUrl });
+    globalRef.__pgPool__ = pool;
     return toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];
@@ -208,6 +211,52 @@ export function getSql(): Promise<Sql> {
     throw err;
   });
   return sqlPromise;
+}
+
+/**
+ * Run `fn` on one connection inside BEGIN/COMMIT.
+ * Neon checkout is required: a pooled query does not keep a transaction open.
+ * PGLite is serialized so two requests cannot interleave on the single connection.
+ */
+export async function withTransaction<T>(fn: (sql: Sql) => Promise<T>): Promise<T> {
+  await getSql();
+  if (dbSource === "neon") {
+    const pool = globalRef.__pgPool__;
+    if (!pool) throw new Error("Postgres pool is not open");
+    const client = await pool.connect();
+    const sql = toSql(async <TRow>(text: string, params: unknown[]) => {
+      const res = await client.query(text, params);
+      return res.rows as TRow[];
+    });
+    try {
+      await client.query("begin");
+      const result = await fn(sql);
+      await client.query("commit");
+      return result;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  const previous = globalRef.__txChain__ ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(async () => {
+    const pg = await globalRef.__pgliteInstance__;
+    if (!pg) throw new Error("Embedded database is not open");
+    return pg.transaction(async (tx) => {
+      const sql = toSql(async <TRow>(text: string, params: unknown[]) => {
+        const result = await tx.query<TRow>(text, params);
+        return result.rows;
+      });
+      return fn(sql);
+    });
+  });
+  globalRef.__txChain__ = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
 
 /**

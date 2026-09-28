@@ -1,0 +1,6 @@
+apiVersion: v2
+name: meridian
+description: Deploy sketch for Meridian web and worker processes.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

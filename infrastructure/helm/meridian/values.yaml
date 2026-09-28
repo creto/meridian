@@ -1,0 +1,17 @@
+# Deploy sketch. Replica counts and the image tag are overrides, not a live cluster.
+# DATABASE_URL, REDIS_URL, MERIDIAN_MASTER_KEY, and S3_ENDPOINT come from the
+# secret named below. Do not inline the master key in this file.
+
+image:
+  repository: meridian
+  tag: local
+  pullPolicy: IfNotPresent
+
+web:
+  replicas: 2
+  port: 8080
+
+worker:
+  replicas: 1
+
+envFromSecret: meridian-env

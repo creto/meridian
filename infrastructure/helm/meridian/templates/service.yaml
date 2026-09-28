@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-web
+  labels:
+    app: meridian
+    component: web
+spec:
+  selector:
+    app: meridian
+    component: web
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

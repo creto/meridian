@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="150 190 1040 880" role="img" aria-label="Meridian">
+  <style>
+    path { stroke: #1a1c21; }
+    @media (prefers-color-scheme: dark) {
+      path { stroke: #f3f2ee; }
+    }
+  </style>
+  <g fill="none" stroke-width="138" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 292 L468 622 L256 953" />
+    <path d="M445 292 L657 622 L445 953" />
+    <path d="M634 292 L846 622 L634 953" />
+    <path d="M823 292 L1035 622 L823 953" />
+  </g>
+</svg>

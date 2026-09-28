@@ -1,7 +1,8 @@
 import { compileExpression } from "../expressions.ts";
-import type { FormComponent, JsonValue, OptionItem, PdfPlacement, ValidateSpec } from "../types.ts";
+import type { FormComponent, JsonValue, OptionItem, ValidateSpec } from "../types.ts";
 import { applicableSettings, defaultSchema, upstreamType } from "./adapter.ts";
 import { applyJsonLogic } from "./json-logic.ts";
+import { overlayToPlacement } from "../pdf-layout.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -137,15 +138,8 @@ function assignValidate(component: FormComponent, key: keyof ValidateSpec, value
 function syncOverlay(component: FormComponent) {
   const overlay = component.formio?.overlay;
   if (!isRecord(overlay)) return;
-  const page = Number(overlay.page);
-  const x = Number(overlay.left);
-  const y = Number(overlay.top);
-  const w = Number(overlay.width);
-  const h = Number(overlay.height);
-  if ([page, x, y, w, h].every((item) => Number.isFinite(item))) {
-    const pdf: PdfPlacement = { page, x, y, w, h };
-    component.pdf = pdf;
-  }
+  const pdf = overlayToPlacement(overlay, component.pdf);
+  if (pdf) component.pdf = pdf;
 }
 
 export function writeSetting(component: FormComponent, path: string, value: unknown): FormComponent {

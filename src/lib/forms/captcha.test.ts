@@ -17,7 +17,7 @@ function formWithCaptcha(): FormDefinition {
     pdfPages: 1,
     settings: { successMessage: "Saved", allowDrafts: true },
     updatedAt: "2026-01-01T00:00:00.000Z",
-  } as FormDefinition;
+  } as unknown as FormDefinition;
 }
 
 test("a captcha accepts the issued characters once and rejects the rest", () => {

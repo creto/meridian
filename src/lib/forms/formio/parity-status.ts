@@ -134,7 +134,7 @@ export function classifySetting(componentType: string, setting: Pick<FormioSetti
     return decision("PARTIAL", "Stored. Calculations run in the browser on change; there is no separate server calculate pass.", "PARTIAL");
   }
   if (setting.key.startsWith("overlay.")) {
-    return decision("PARTIAL", "Stored. Numeric page and box values are copied onto the Meridian PDF placement when they are numbers.", "PARTIAL");
+    return decision("FULL", "Page and box are stored as a Form.io overlay and drawn on the PDF tab. Pixel values are converted onto the letter page.");
   }
   if (RUNTIME_FULL.has(setting.key)) {
     return decision("FULL", "Shown in the inspector, stored on the component document, and applied by the native renderer or export.");

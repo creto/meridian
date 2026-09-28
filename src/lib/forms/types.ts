@@ -60,12 +60,21 @@ export interface ValidateSpec {
   customMessage?: string;
 }
 
+export type PdfAlign = "left" | "center" | "right";
+
 export interface PdfPlacement {
   page: number;
+  /** Percent of the page, origin top-left. */
   x: number;
   y: number;
   w: number;
   h: number;
+  fontSize?: number;
+  align?: PdfAlign;
+  /** currency, upper, lower, or a date mask with YYYY, MM, and DD. */
+  format?: string;
+  font?: "Helvetica" | "Helvetica-Bold" | "Helvetica-Oblique" | "Courier";
+  showLabel?: boolean;
 }
 
 export interface FormComponent {
@@ -139,6 +148,11 @@ export interface FormSettings {
   draftLabel: string;
   successMessage: string;
   allowDraft: boolean;
+  /** Uploaded PDF template metadata. The bytes live in the browser store, not the form JSON. */
+  pdf?: {
+    fileName?: string;
+    pageCount?: number;
+  };
 }
 
 export interface StorageProfile {

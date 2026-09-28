@@ -10,6 +10,7 @@ import { editFormWithModel, type ChatTurn } from "@/lib/forms/ai.functions";
 import { proposalFromModel, type EditProposal } from "@/lib/forms/llm";
 import { CATALOG, createComponent, GROUPS } from "@/lib/forms/catalog";
 import { PropertyInspector } from "@/components/studio/property-inspector";
+import { PdfPane } from "@/components/studio/pdf-pane";
 import { semanticDiff } from "@/lib/forms/diff";
 import { lintForm } from "@/lib/forms/lint";
 import { toCapabilities, toJsonSchema, inputLabels } from "@/lib/forms/schema-export";
@@ -429,7 +430,16 @@ export function Studio({ formId }: { formId: string }) {
       ) : null}
 
       {mode === "API" ? <ApiPane form={form} /> : null}
-      {mode === "PDF" ? <PdfPane form={form} onMove={(id, pdf) => { commit(updateComponent(form.components, id, { pdf })); }} /> : null}
+      {mode === "PDF" ? (
+        <PdfPane
+          form={form}
+          onComponents={(components, history) => {
+            if (history) commit(components);
+            else updateForm(form.id, (current) => ({ ...current, components }));
+          }}
+          onForm={(patch) => patchMeta(patch)}
+        />
+      ) : null}
       {mode === "Flow" ? (
         <FlowPane
           form={form}
@@ -995,54 +1005,6 @@ function ApiPane({ form }: { form: FormDefinition }) {
           </div>
           {result ? <pre className="overflow-auto rounded-xl border border-line p-3 font-mono text-xs">{result}</pre> : null}
         </section>
-      </div>
-    </div>
-  );
-}
-
-function PdfPane({ form, onMove }: { form: FormDefinition; onMove: (id: string, pdf: NonNullable<FormComponent["pdf"]>) => void }) {
-  const fields = flattenInputs(form.components).filter((c) => c.type !== "content");
-  const placed = fields.filter((c) => c.pdf);
-  const open = fields.filter((c) => !c.pdf);
-  return (
-    <div className="grid min-h-0 flex-1 gap-4 overflow-auto bg-paper p-4 text-paper-fg lg:grid-cols-[16rem_1fr]">
-      <aside className="grid content-start gap-2">
-        <h2 className="font-semibold">Unplaced</h2>
-        {open.map((field) => (
-          <button key={field.id} type="button" className="h-11 rounded-md border border-line bg-surface px-3 text-left text-sm" onClick={() => onMove(field.id, { page: 1, x: 10, y: 12 + open.indexOf(field) * 8, w: 40, h: 6 })}>
-            Place {field.label}
-          </button>
-        ))}
-        <p className="text-xs text-muted">Coordinates are stored on the component. Download a filled PDF from a submission to get the record.</p>
-      </aside>
-      <div className="relative mx-auto aspect-[8.5/11] w-full max-w-xl border border-line bg-elevated shadow-sm">
-        <p className="absolute top-3 left-4 text-xs text-subtle">Page 1</p>
-        {placed.map((field) => (
-          <button
-            key={field.id}
-            type="button"
-            className="absolute flex items-center rounded-sm border border-accent bg-paper/90 px-2 text-left text-xs"
-            style={{ left: `${field.pdf!.x}%`, top: `${field.pdf!.y}%`, width: `${field.pdf!.w}%`, height: `${field.pdf!.h}%` }}
-            onPointerDown={(event) => {
-              const page = event.currentTarget.parentElement;
-              if (!page) return;
-              const rect = page.getBoundingClientRect();
-              const move = (ev: PointerEvent) => {
-                const x = Math.min(80, Math.max(2, ((ev.clientX - rect.left) / rect.width) * 100));
-                const y = Math.min(90, Math.max(2, ((ev.clientY - rect.top) / rect.height) * 100));
-                onMove(field.id, { ...field.pdf!, x, y });
-              };
-              const up = () => {
-                window.removeEventListener("pointermove", move);
-                window.removeEventListener("pointerup", up);
-              };
-              window.addEventListener("pointermove", move);
-              window.addEventListener("pointerup", up);
-            }}
-          >
-            {field.label}
-          </button>
-        ))}
       </div>
     </div>
   );

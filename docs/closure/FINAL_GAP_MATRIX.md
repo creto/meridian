@@ -48,7 +48,7 @@ This file is the closure baseline. Rows move to COMPLETE only when the acceptanc
 | Performance numbers | MISSING | grid visible window exists | n/a | n/a | n/a | none | measured bench, no invented latencies | perf |
 | Connector matrix | PARTIAL | provider implementations | storage test route | admin storage page | storage_profiles | contract tests, capability.test.ts | live cloud calls remain DEFERRED_WITH_REASON without credentials | connectors |
 | Generic REST ECM | PARTIAL | putRest | storage put | none | ecm_profiles | none yet | URL templates, SSRF, id path | connectors |
-| Helm web and worker | PARTIAL | infrastructure/helm/meridian including the collector. `helm template` renders it | n/a | n/a | n/a | check-deploy.mjs | Not applied to a cluster. Compose is not started here because Docker is absent | ops |
+| Helm web and worker | PARTIAL | `helm upgrade --install` on a local k3s API created the deployments. Pods stayed Pending because no node joined | n/a | n/a | n/a | check-deploy.mjs | Image never started. Compose was not started | ops |
 | CI | COMPLETE | .github/workflows/ci.yml and meridian-ci.yml | n/a | n/a | n/a | typecheck, platform tests, helm template, Playwright | The Playwright job needs the Chromium install step | ops |
 
 ## Deferred with reason

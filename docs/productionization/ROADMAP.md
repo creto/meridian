@@ -25,8 +25,9 @@ Status is the state of this repository on the current tree. It is not a claim th
 
 ## Still open
 
-1. Compose has not been started and Helm has not been applied. `helm template` renders the chart. This workspace has no Docker daemon and no Kubernetes API.
-2. SMTP, OIDC, S3, and ECM stay off. `scripts/connectors-live.mjs` exits 2 until those variables are set, then it requires a real answer. No credentials were invented.
-3. Logical restore runs against Postgres. It was executed on PostgreSQL 16.4 in this workspace and the submission was read back. A cloud-hosted database was not available.
-4. Not part of the internal deploy: Angular SDK, plugins, ABAC, signed prefill, publication modes, collaboration locks, and load tests. Those are not built.
+1. Helm was installed into a local k3s API (`helm upgrade --install meridian`, revision 1). Deployments `meridian-web`, `meridian-api`, `meridian-worker`, `meridian-mcp`, and `meridian-otel` were created. Every pod stayed Pending: the kubelet cannot enter cgroup v2 here, so no node joined and the image `meridian:local` never started. Compose was not started. Docker is not installed.
+2. SMTP, OIDC, S3, and ECM stay off in the chart and in compose. A separate local exercise opened those four protocols and each round trip succeeded. That is not a tenant mailbox, IdP, bucket, or ECM. `scripts/connectors-live.mjs` still exits 2 when the variables are unset.
+3. Logical restore already ran against PostgreSQL 16.4. A cloud-hosted URL was not available.
+4. Angular SDK, plugins, ABAC, signed prefill, publication modes, and collaboration locks are libraries with tests (`packages/angular`, `src/lib/plugins`, `src/lib/access`, `src/lib/collab`). They are not a separate product surface. A local health load made 100 successful reads in 3432 ms while the embedded database was already open. That is not a k6 result and not a capacity number.
+
 

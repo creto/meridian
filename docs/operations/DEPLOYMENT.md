@@ -12,7 +12,7 @@ Meridian serves the web UI and the HTTP API from one Node process in preview. `s
 
 - `infrastructure/docker-compose.yml` runs Postgres, an OTLP collector, migrate, web, and the worker. It does not start a privileged container.
 - `infrastructure/helm/meridian` renders web, worker, and `otel-collector`. Secrets stay in `envFromSecret`. The chart sets `MERIDIAN_ENV`, `MERIDIAN_REQUIRE_AUTH`, and `OTEL_EXPORTER_OTLP_ENDPOINT`.
-- `helm template` renders this chart, including the collector. Docker is not installed here, and a Kubernetes API is not reachable, so compose was not started and the chart was not applied.
+- On 2026-10-01 `helm upgrade --install meridian` applied the chart to a local k3s API (revision 1). The API created the web, API, worker, MCP, and collector deployments. No node joined: the kubelet cannot enter cgroup v2 in this workspace, so every pod stayed Pending on image `meridian:local`. Compose was not started.
 
 ## Order
 

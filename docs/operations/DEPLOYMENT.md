@@ -1,25 +1,21 @@
 # Deployment
 
-Meridian serves the web UI and the HTTP API from one Node process in preview. A second process, `scripts/worker.mjs`, claims rows from `jobs` when `DATABASE_URL` is set.
+Meridian serves the web UI and the HTTP API from one Node process in preview. `scripts/worker.mjs` claims jobs, fires due timers, drains the outbox, and delivers signed webhooks. The agent request path does not resume timers.
 
 ## What is running
 
-- Preview and local development use embedded Postgres (PGLite) under `data/pglite`.
-- A hosted database is used only when `DATABASE_URL` is set. The master key must already exist. This repository does not invent one.
-- Helm sketches live in `infrastructure/helm/meridian`. They are not a tested cluster.
+- Preview uses embedded Postgres. Its master key is kept in memory for that process and is not written beside the data.
+- Production requires `MERIDIAN_ENV=production`, `DATABASE_URL`, `MERIDIAN_MASTER_KEY`, and `MERIDIAN_REQUIRE_AUTH=1`.
+- SMTP, OIDC, S3, and ECM stay off until their variables are set. A missing credential is a failure, not a successful delivery.
 
-## Chart
+## Chart and compose
 
-- `web` serves the app and the agent API.
-- `api` is the same image, split out so it can scale separately later.
-- `worker` runs `scripts/worker.mjs`. It does not expose HTTP. Liveness is an exec probe.
-- `mcp` does not open a port. Tool JSON is `GET /api/agent/v1/mcp/tools` on the API.
-- `pdf` and `ai` deployments render only when their replica count is above zero. Default is zero.
-- Ingress, an HPA, a pod disruption budget, and a config map are in `templates/ingress.yaml`.
-- Secrets come from the secret named by `envFromSecret`. Do not put `MERIDIAN_MASTER_KEY` in the chart.
+- `infrastructure/docker-compose.yml` runs Postgres, an OTLP collector, migrate, web, and the worker. It does not start a privileged container.
+- `infrastructure/helm/meridian` renders web, worker, and `otel-collector`. Secrets stay in `envFromSecret`. The chart sets `MERIDIAN_ENV`, `MERIDIAN_REQUIRE_AUTH`, and `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- `helm template` can render this chart. This workspace has no Docker daemon, so the compose file has not been started and the chart has not been applied to a cluster.
 
 ## Order
 
-1. Apply migrations. `npm run db:migrate` does this when `DATABASE_URL` is set. PGLite applies the same files on first query.
+1. Apply migrations with `npm run db:migrate` when `DATABASE_URL` is set.
 2. Start the web process.
-3. Start the worker only after the database accepts connections.
+3. Start the worker after the database accepts connections.

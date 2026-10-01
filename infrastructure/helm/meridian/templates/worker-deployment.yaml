@@ -26,6 +26,13 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ["node", "--experimental-strip-types", "scripts/worker.mjs"]
+          env:
+            - name: MERIDIAN_ENV
+              value: {{ .Values.env.meridianEnv | quote }}
+            - name: MERIDIAN_REQUIRE_AUTH
+              value: {{ .Values.env.requireAuth | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://{{ .Release.Name }}-otel:4318
           envFrom:
             - secretRef:
                 name: {{ .Values.envFromSecret }}

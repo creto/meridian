@@ -38,6 +38,16 @@ export function checkNoDiskKey(text) {
   return errors;
 }
 
+export function checkOtel(compose, worker, agent) {
+  const errors = [];
+  if (!compose.includes("OTEL_EXPORTER_OTLP_ENDPOINT")) errors.push("Compose must point the processes at the collector");
+  if (!compose.includes("MERIDIAN_REQUIRE_AUTH")) errors.push("Compose must set MERIDIAN_REQUIRE_AUTH");
+  if (!compose.includes("otel/opentelemetry-collector")) errors.push("Compose must run a collector");
+  if (!worker.includes("OTEL_EXPORTER_OTLP_ENDPOINT")) errors.push("The worker chart must export traces");
+  if (agent.includes("resumeTimers")) errors.push("Timers must not resume on the agent request path");
+  return errors;
+}
+
 export function checkHelmWorker(text) {
   const body = activeLines(text);
   const errors = [];
@@ -55,6 +65,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     ...checkDockerfile(read("../Dockerfile")),
     ...checkCompose(read("../infrastructure/docker-compose.yml")),
     ...checkHelmWorker(read("../infrastructure/helm/meridian/templates/worker-deployment.yaml")),
+    ...checkOtel(
+      read("../infrastructure/docker-compose.yml"),
+      read("../infrastructure/helm/meridian/templates/worker-deployment.yaml"),
+      read("../src/lib/platform/agent-http.ts"),
+    ),
     ...checkNoDiskKey(read("../src/lib/platform/durable-server.ts")),
   ];
   if (problems.length) {

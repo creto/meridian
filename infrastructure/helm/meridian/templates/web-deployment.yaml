@@ -27,6 +27,13 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.web.port }}
+          env:
+            - name: MERIDIAN_ENV
+              value: {{ .Values.env.meridianEnv | quote }}
+            - name: MERIDIAN_REQUIRE_AUTH
+              value: {{ .Values.env.requireAuth | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://{{ .Release.Name }}-otel:4318
           envFrom:
             - secretRef:
                 name: {{ .Values.envFromSecret }}

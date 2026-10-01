@@ -31,5 +31,8 @@ ingress:
   host: meridian.example.com
 
 envFromSecret: meridian-env
+env:
+  meridianEnv: production
+  requireAuth: "1"
 config:
   logFormat: json

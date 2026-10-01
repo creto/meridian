@@ -13,6 +13,7 @@ import { WORKSPACE_TENANT } from "../domain/workspace-store.ts";
 import { completeWorkflowTask, publishForm, submitForm } from "../domain/commands.ts";
 import { authorize, type Action } from "../authz/authorize.ts";
 import { guard } from "../authz/http-gate.ts";
+import { ownsPreviewSnapshot } from "../authz/tenant-scope.ts";
 import { runTenantCommand } from "../domain/tx.ts";
 import type { WorkspaceRole } from "./rbac.ts";
 import { applySecurityHeaders } from "../security/http.ts";
@@ -30,34 +31,47 @@ async function commit(snap: WorkspaceSnapshot): Promise<WorkspaceSnapshot> {
   return snap;
 }
 
-async function resumeTimers(): Promise<void> {
-  const snap = readSnapshot();
-  let changed = false;
-  const submissions = [];
-  for (const submission of snap.submissions) {
-    if (submission.workflow?.waitUntil && Date.parse(submission.workflow.waitUntil) <= Date.now()) {
-      const form = snap.forms.find((item) => item.id === submission.formId);
-      if (form) {
-        submissions.push(await advanceServices(form, submission, "timer"));
-        changed = true;
-        continue;
-      }
-    }
-    submissions.push(submission);
-  }
-  if (!changed) return;
-  await commit(writeSnapshot({ ...snap, revision: snap.revision + 1, submissions }));
-}
-
 async function ensureSeed() {
   if (readSnapshot().forms.length > 0) return;
   const seeded = writeSnapshot({ revision: 1, forms: [supplierForm(), incidentForm()], submissions: [], idempotency: [] });
   await commit(seeded);
 }
 
-function findForm(nameOrId: string): FormDefinition | undefined {
-  const snap = readSnapshot();
-  return snap.forms.find((form) => form.name === nameOrId || form.id === nameOrId);
+async function findForm(nameOrId: string, tenantId: string): Promise<FormDefinition | undefined> {
+  if (ownsPreviewSnapshot(tenantId)) {
+    return readSnapshot().forms.find((form) => form.name === nameOrId || form.id === nameOrId);
+  }
+  const rows = await runTenantCommand(tenantId, (sql) =>
+    sql.query<{ id: string; name: string; title: string; description: string; display: "form" | "wizard"; status: FormDefinition["status"]; version: number; schema: FormDefinition["components"] | string; workflow: FormDefinition["workflow"] | string | null; settings: FormDefinition["settings"] | string; tags: string[] | string; created_at: string; updated_at: string; pdf_pages: number }>(
+      "select id, name, title, description, display, status, version, schema, workflow, settings, tags, created_at, updated_at, pdf_pages from forms where tenant_id = $1 and (id = $2 or name = $2)",
+      [tenantId, nameOrId],
+    ),
+  );
+  const row = rows[0];
+  if (!row) return undefined;
+  const parse = <T>(value: T | string | null): T | undefined => {
+    if (value == null) return undefined;
+    return typeof value === "string" ? (JSON.parse(value) as T) : value;
+  };
+  return {
+    id: row.id,
+    name: row.name,
+    title: row.title,
+    description: row.description ?? "",
+    display: row.display,
+    status: row.status,
+    version: Number(row.version),
+    hasUnpublishedChanges: false,
+    components: parse(row.schema) ?? [],
+    settings: parse(row.settings) ?? { submitLabel: "Submit", draftLabel: "Save", successMessage: "Received.", allowDraft: true },
+    workflow: parse(row.workflow),
+    tags: parse(row.tags) ?? [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    versions: [],
+    activity: [],
+    pdfPages: Number(row.pdf_pages ?? 1),
+  };
 }
 
 function agentAction(method: string, parts: string[]): Action | "public" {
@@ -92,7 +106,6 @@ export async function handleAgent(method: string, path: string, request: Request
     if (!gated.ok) return gated.response;
     tenantId = gated.actor.tenantId;
     role = gated.actor.role;
-    await resumeTimers();
     await ensureSeed();
   }
   const allow = (next: Action, type: string, id?: string) =>
@@ -100,6 +113,7 @@ export async function handleAgent(method: string, path: string, request: Request
   if (method === "GET" && parts[0] === "health" && parts[1] === "live") return json({ ok: true, status: "live" });
   if (method === "GET" && parts[0] === "health" && parts[1] === "ready") return json({ ok: true, status: "ready", persistence: "postgresql" });
   if (method === "POST" && parts[0] === "sync") {
+    if (!ownsPreviewSnapshot(tenantId)) return json({ error: { code: "FORBIDDEN", message: "This snapshot belongs to another tenant" } }, 403);
     const body = (await request.json()) as WorkspaceSnapshot;
     const current = readSnapshot();
     const incoming: WorkspaceSnapshot = {
@@ -114,16 +128,23 @@ export async function handleAgent(method: string, path: string, request: Request
     await commit(saved);
     return json({ ...saved, contentHash: workspaceHash(saved) });
   }
-  if (method === "GET" && parts[0] === "sync") return json(readSnapshot());
+  if (method === "GET" && parts[0] === "sync") {
+    if (!ownsPreviewSnapshot(tenantId)) return json({ error: { code: "FORBIDDEN", message: "This snapshot belongs to another tenant" } }, 403);
+    return json(readSnapshot());
+  }
   if (method === "GET" && parts.length === 1 && parts[0] === "forms") {
+    if (!ownsPreviewSnapshot(tenantId)) {
+      const rows = await runTenantCommand(tenantId, (sql) => sql.query("select id, name, title, status, version from forms where tenant_id = $1", [tenantId]));
+      return json({ forms: rows });
+    }
     return json({ forms: readSnapshot().forms.map((form) => ({ id: form.id, name: form.name, title: form.title, status: form.status, version: form.version })) });
   }
   if (method === "GET" && parts[0] === "forms" && parts.length === 2) {
-    const form = findForm(parts[1] ?? "");
+    const form = await findForm(parts[1] ?? "", tenantId);
     return form ? json(form) : json({ error: { code: "NOT_FOUND", message: "Form not found" } }, 404);
   }
   if (method === "GET" && parts[0] === "forms" && parts.length === 3) {
-    const form = findForm(parts[1] ?? "");
+    const form = await findForm(parts[1] ?? "", tenantId);
     if (!form) return json({ error: { code: "NOT_FOUND", message: "Form not found" } }, 404);
     if (parts[2] === "capabilities") return json(toCapabilities(form));
     if (parts[2] === "input-schema" || parts[2] === "json-schema") return json(toJsonSchema(form));
@@ -139,14 +160,14 @@ export async function handleAgent(method: string, path: string, request: Request
     return json({ form: generateFormFromText(body.prompt), provider: "local" });
   }
   if (method === "POST" && parts[0] === "forms" && parts[2] === "validate-object") {
-    const form = findForm(parts[1] ?? "");
+    const form = await findForm(parts[1] ?? "", tenantId);
     if (!form) return json({ error: { code: "NOT_FOUND", message: "Form not found" } }, 404);
     const body = (await request.json()) as { data?: Record<string, unknown> };
     const errors = validateForm(form, body.data ?? {});
     return json({ ok: Object.keys(errors).length === 0, errors });
   }
   if (method === "POST" && parts[0] === "forms" && parts[2] === "submit-object") {
-    const form = findForm(parts[1] ?? "");
+    const form = await findForm(parts[1] ?? "", tenantId);
     if (!form) return json({ error: { code: "NOT_FOUND", message: "Form not found" } }, 404);
     const body = (await request.json()) as { data?: Record<string, unknown> };
     const key = request.headers.get("idempotency-key") ?? undefined;
@@ -180,10 +201,15 @@ export async function handleAgent(method: string, path: string, request: Request
     return json({ submissionId: submission.id, status: submission.status, workflow: submission.workflow, documents: submission.documents });
   }
   if (method === "GET" && parts[0] === "submissions" && parts[1]) {
+    if (!ownsPreviewSnapshot(tenantId)) {
+      const rows = await runTenantCommand(tenantId, (sql) => sql.query("select id, status, data, workflow from submissions where id = $1 and tenant_id = $2", [parts[1], tenantId]));
+      return rows[0] ? json(rows[0]) : json({ error: { code: "NOT_FOUND", message: "Submission not found" } }, 404);
+    }
     const found = readSnapshot().submissions.find((item) => item.id === parts[1]);
     return found ? json(found) : json({ error: { code: "NOT_FOUND", message: "Submission not found" } }, 404);
   }
   if (method === "PATCH" && parts[0] === "submissions" && parts[1]) {
+    if (!ownsPreviewSnapshot(tenantId)) return json({ error: { code: "NOT_FOUND", message: "Submission not found" } }, 404);
     const body = (await request.json()) as { data?: Record<string, unknown> };
     let updated: Submission | undefined;
     mutateSnapshot((current) => ({
@@ -199,7 +225,7 @@ export async function handleAgent(method: string, path: string, request: Request
     return updated ? json(updated) : json({ error: { code: "NOT_FOUND", message: "Submission not found" } }, 404);
   }
   if (method === "POST" && parts[0] === "forms" && parts[2] === "publish") {
-    const form = findForm(parts[1] ?? "");
+    const form = await findForm(parts[1] ?? "", tenantId);
     if (!form) return json({ error: { code: "NOT_FOUND", message: "Form not found" } }, 404);
     const decision = allow("form.publish", "form", form.id);
     if (!decision.allow) return json({ error: { code: "FORBIDDEN", message: decision.reason } }, 403);

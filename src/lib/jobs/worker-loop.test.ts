@@ -53,3 +53,38 @@ test("a due timer fires for its tenant and mail waits for SMTP", async () => {
   const missed = await sql.query("update jobs set status = 'completed' where id = 'job_mail' and tenant_id = 'ten_northwind' returning id");
   assert.equal(missed.length, 0);
 });
+
+test("a due submission timer advances in the worker and not before it is due", async () => {
+  const sql = await db();
+  const workflow = {
+    nodes: [
+      { id: "wait", type: "timer", title: "Wait", delayMs: 60_000 },
+      { id: "done", type: "end", title: "Done" },
+    ],
+    edges: [{ from: "wait", to: "done", when: "approved" }],
+  };
+  const settings = { submitLabel: "Submit", draftLabel: "Save", successMessage: "Received.", allowDraft: true };
+  await sql.query("insert into workspaces (id, tenant_id, name) values ('ws_ten_northwind', 'ten_northwind', 'Northwind')");
+  await sql.query(
+    `insert into forms (id, tenant_id, workspace_id, name, title, display, status, version, schema, workflow, settings, created_at, updated_at)
+     values ('frm_timer', 'ten_northwind', 'ws_ten_northwind', 'timer', 'Timer', 'form', 'published', 1, '[]'::jsonb, $1::jsonb, $2::jsonb, now(), now())`,
+    [JSON.stringify(workflow), JSON.stringify(settings)],
+  );
+  await sql.query(
+    `insert into submissions (id, tenant_id, workspace_id, form_id, form_name, form_version, status, data, workflow, created_at, updated_at)
+     values ('sub_timer', 'ten_northwind', 'ws_ten_northwind', 'frm_timer', 'timer', 1, 'in_review', '{}'::jsonb, $1::jsonb, now(), now())`,
+    [JSON.stringify({ currentNode: "wait", history: [], waitUntil: "2099-01-01T00:00:00.000Z" })],
+  );
+  const waiting = await pumpJobs(sql, {} as NodeJS.ProcessEnv);
+  assert.equal(waiting.timers, 0);
+  await sql.query(
+    "update submissions set workflow = $1::jsonb where id = 'sub_timer' and tenant_id = 'ten_northwind'",
+    [JSON.stringify({ currentNode: "wait", history: [], waitUntil: "2000-01-01T00:00:00.000Z" })],
+  );
+  const fired = await pumpJobs(sql, {} as NodeJS.ProcessEnv);
+  assert.equal(fired.timers, 1);
+  const row = await sql.query<{ node: string }>("select workflow->>'currentNode' as node from submissions where id = 'sub_timer' and tenant_id = 'ten_northwind'");
+  assert.equal(row[0]?.node, "done");
+  const other = await sql.query("select id from submissions where tenant_id = 'ten_contoso'");
+  assert.equal(other.length, 0);
+});

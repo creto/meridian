@@ -1,21 +1,12 @@
 # Connectors
 
-`GET /api/platform/connectors` returns the capability matrix from `src/lib/storage/capability.ts`.
+Without credentials the connector stays off. A job is not marked sent, uploaded, or discovered.
 
-Support is one of `implemented`, `partial`, `missing`, or `not-applicable`. A partial cell is not a finished connector.
+| Path | Required variables | What a round trip does |
+| --- | --- | --- |
+| SMTP | `SMTP_URL` | EHLO, MAIL FROM, RCPT TO, DATA against that server |
+| OIDC | `OIDC_ISSUER`, `OIDC_CLIENT_ID` | GET `/.well-known/openid-configuration` and require auth and token endpoints |
+| S3 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | SigV4 PUT then GET of `meridian-healthcheck.txt` |
+| ECM | `ECM_BASE_URL` | PUT then GET. Private addresses are blocked in production |
 
-## Providers
-
-| Provider | Put / get | Signed URL | Notes |
-|---|---|---|---|
-| S3 and MinIO | implemented | implemented | MinIO uses the S3 client with another endpoint |
-| GCS | implemented | implemented | Token exchange exists |
-| Azure Blob | implemented | partial | Shared key, not user-delegation SAS |
-| SharePoint | implemented | not applicable | Graph upload session |
-| CMIS | implemented | not applicable | Browser binding |
-| REST ECM | request builder | n/a | SSRF checks are required. Delete is not implemented |
-| Local and memory | implemented | missing | Preview and tests |
-
-Admin can save a connection row with a `secret:` name. Test checks the endpoint shape and the SSRF guard. It does not open a socket to the provider.
-
-Do not paste a raw access key into the connection form.
+`src/lib/connectors/roundtrip.test.ts` runs those four dialogues against local servers. That is not a tenant's SMTP, IdP, bucket, or ECM. Compose leaves SMTP and OIDC unset on purpose.

@@ -9,7 +9,7 @@ export interface ConnectorPosture {
 
 export interface RuntimePosture {
   database: "postgres" | "pglite";
-  masterKey: "env" | "local-file" | "missing";
+  masterKey: "env" | "memory" | "missing";
   authRequired: boolean;
   production: boolean;
   productionReady: boolean;
@@ -20,7 +20,7 @@ export interface RuntimePosture {
 export function runtimePosture(env: NodeJS.ProcessEnv = process.env): RuntimePosture {
   const production = env.MERIDIAN_ENV === "production";
   const database = env.DATABASE_URL?.trim() ? "postgres" : "pglite";
-  const masterKey = env.MERIDIAN_MASTER_KEY?.trim() ? "env" : database === "postgres" ? "missing" : "local-file";
+  const masterKey = env.MERIDIAN_MASTER_KEY?.trim() ? "env" : env.DATABASE_URL?.trim() || production ? "missing" : "memory";
   const problems: string[] = [];
   if (production && database !== "postgres") problems.push("DATABASE_URL is required in production");
   if (production && masterKey !== "env") problems.push("MERIDIAN_MASTER_KEY is required in production");

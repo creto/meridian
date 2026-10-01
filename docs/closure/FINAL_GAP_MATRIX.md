@@ -12,7 +12,7 @@ This file is the closure baseline. Rows move to COMPLETE only when the acceptanc
 | Dependency-ordered calculations | COMPLETE | src/lib/forms/engine.ts calculationOrder | engine | runtime | n/a | engine.test.ts | none | done |
 | Immutable published versions | COMPLETE | src/lib/domain/commands.ts publishForm | agent publish | studio | form_versions | commands.test.ts | none | done |
 | Tenant-scoped submissions | COMPLETE | commands.ts submitForm | agent submit | fill | submissions | persistence.suite.test.ts | none | done |
-| Argon2id passwords | PARTIAL | src/lib/identity/passwords.ts plus scrypt in platform/crypto.ts | login | none dedicated | users | identity/sessions.test.ts | Local login UI is the hosted gate, not a Meridian password form. Argon2id exists; platform crypto still has scrypt for older rows | identity |
+| Argon2id passwords | COMPLETE | src/lib/identity/passwords.ts. Production rejects scrypt | login | preview stays open | users | commands.test.ts, sessions.test.ts | No hosted password form | identity |
 | API key hash, rotate, revoke | COMPLETE | src/lib/platform/api-keys.ts | agent bearer | developer | api_keys | platform tests | none | done |
 | Audit hash chain | COMPLETE | appendAudit / verifyAuditChain | none public yet | admin audit page landing with this change | audit_events | security/closure.test.ts | export of the chain is still a page action | admin |
 | AcroForm inspect, fill, flatten | COMPLETE | src/lib/pdf/acroform.ts | internal | not yet a wizard | pdf templates | acroform.test.ts | UX that lists fields and saves a mapping | pdf |
@@ -30,26 +30,26 @@ This file is the closure baseline. Rows move to COMPLETE only when the acceptanc
 | Angular SDK | MISSING | no package yet | n/a | n/a | n/a | none | package and example | sdk |
 | Web component | PARTIAL | embed contract only | n/a | no element | n/a | embed/contract.test.ts | custom element that fetches the agent API | sdk |
 | MCP | COMPLETE | src/lib/mcp/protocol.ts | mcp | n/a | n/a | protocol.test.ts | none for the protocol | sdk |
-| OpenTelemetry traces and metrics | PARTIAL | src/lib/observe/trace.ts redacts secrets | none | none | in memory | trace.test.ts | W3C traceparent and the metric set | telemetry |
+| OpenTelemetry traces and metrics | PARTIAL | src/lib/observe/otel.ts exports when the endpoint is set. Helm and compose start a collector | worker pump | none | in memory until export | otel-export.test.ts | A cluster has not received spans | telemetry |
 | Plugin SDK and CLI | MISSING | registry is internal | n/a | n/a | n/a | none | scaffold plus trust check | plugins |
 | Publication modes | MISSING | no policy type | n/a | n/a | publication_policies in 0004 | none yet | enforce on fill and agent submit | access |
 | Signed prefill | MISSING | n/a | n/a | n/a | prefill_tokens in 0004 | none yet | HMAC token and protected fields | access |
 | OIDC authorization code + PKCE | MISSING | local passwords only. Better Auth is intentionally not enabled | n/a | hosted gate is not OIDC | oidc_providers in 0004 | none yet | discovery, PKCE, claim map. Live IdP is deferred until a tenant stores an issuer | identity |
 | Data sources and cascading selects | MISSING | selects are static options | n/a | n/a | data_sources in 0004 | none yet | REST lookup with stale-response guard | data |
 | Async validation | MISSING | validateField is synchronous | n/a | n/a | n/a | none | debounced server check | data |
-| Notification providers | PARTIAL | notify/template.ts escapes HTML | none | none | notification_outbox in 0004 | template tests | SMTP and HTTP providers, queued send | notify |
+| Notification providers | PARTIAL | worker calls smtpRoundTrip before marking mail sent | none | none | notification_outbox | worker-loop.test.ts, roundtrip.test.ts | No tenant SMTP server is configured | notify |
 | Cursor search and XLSX export job | PARTIAL | search/query.ts | none | data pane is not cursor based | saved_views in 0004 | query.test.ts | async xlsx job | search |
 | ABAC | MISSING | RBAC only in authz/authorize.ts | agent authorize | none | abac_policies in 0004 | authorize tests for RBAC | expression policies on the server | access |
 | Collaboration lock and stale edit | MISSING | n/a | n/a | studio last-write-wins in the client store | form_edit_locks in 0004 | none yet | reject stale revision | collab |
 | Comments outside submission JSON | MISSING | task comment is a column on the task | task complete body | inbox comment field | comments table in 0004 | none yet | form, submission, and task targets | collab |
 | Feature flag targeting | PARTIAL | feature_flags boolean per tenant | none | none | flag_rules in 0004 | directory flag helpers | user, workspace, percentage | flags |
-| Backup, restore, verify | MISSING | no script | n/a | n/a | n/a | none | scripts plus a fixture test. No numeric RPO claimed | dr |
+| Backup, restore, verify | COMPLETE | scripts/backup.mjs and restore.mjs | n/a | n/a | jsonl tables | backup.test.mjs | Not restored onto a hosted database | dr |
 | Accessibility and per-form locale | PARTIAL | focus-visible in CSS, i18n/catalog.ts | n/a | partial | n/a | catalog.test.ts | keyboard traps, contrast, formatters | ux |
 | Performance numbers | MISSING | grid visible window exists | n/a | n/a | n/a | none | measured bench, no invented latencies | perf |
 | Connector matrix | PARTIAL | provider implementations | storage test route | admin storage page | storage_profiles | contract tests, capability.test.ts | live cloud calls remain DEFERRED_WITH_REASON without credentials | connectors |
 | Generic REST ECM | PARTIAL | putRest | storage put | none | ecm_profiles | none yet | URL templates, SSRF, id path | connectors |
-| Helm web and worker | PARTIAL | infrastructure/helm/meridian | n/a | n/a | n/a | none | api, mcp, pdf, ai, ingress, HPA, PDB | ops |
-| CI | PARTIAL | .github/workflows/meridian-ci.yml | n/a | n/a | n/a | the workflow | typecheck and new tests in the job | ops |
+| Helm web and worker | PARTIAL | infrastructure/helm/meridian including the collector. `helm template` renders it | n/a | n/a | n/a | check-deploy.mjs | Not applied to a cluster. Compose is not started here because Docker is absent | ops |
+| CI | COMPLETE | .github/workflows/ci.yml and meridian-ci.yml | n/a | n/a | n/a | typecheck, platform tests, helm template, Playwright | The Playwright job needs the Chromium install step | ops |
 
 ## Deferred with reason
 

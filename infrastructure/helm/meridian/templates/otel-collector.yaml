@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-otel
+  labels:
+    app: meridian
+    component: otel
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch: {}
+    exporters:
+      debug:
+        verbosity: basic
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [debug]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-otel
+  labels:
+    app: meridian
+    component: otel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: meridian
+      component: otel
+  template:
+    metadata:
+      labels:
+        app: meridian
+        component: otel
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: otel
+          image: otel/opentelemetry-collector:0.111.0
+          args: ["--config=/etc/otel/config.yaml"]
+          ports:
+            - name: otlp-http
+              containerPort: 4318
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-otel
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-otel
+spec:
+  selector:
+    app: meridian
+    component: otel
+  ports:
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http

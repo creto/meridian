@@ -1,26 +1,28 @@
 # Productionization roadmap
 
-Order follows the prompt. Status is the state of this repository, not a promise.
+Status is the state of this repository on the current tree. It is not a claim that a cluster or a cloud account is connected.
 
 | Phase | Work | Status |
 | --- | --- | --- |
-| 1 | Gap analysis, this roadmap, function map | COMPLETE as tracking documents |
-| 2 | Postgres migrations for a relational workspace | PARTIAL. `0001` platform tables, `0002` forms, versions, submissions, revisions, workflow instances, outbox |
-| 3 | Repository writes inside a transaction, tenant predicate on every row | PARTIAL. `replaceTenantWorkspace` / `loadTenantWorkspace`. Publish, submit, and task completion are not yet their own transactions |
-| 4 | Multi-tenant isolation tests for forms and submissions | PARTIAL. One test. API, MCP, and task leaks are untested |
-| 5 | Identity, durable sessions, Argon2id | NOT IMPLEMENTED. Existing users use scrypt. Platform sign-in stays off so the builder remains usable |
-| 6 | RBAC enforced on every API | NOT IMPLEMENTED |
-| 7 | API key rotation, scopes, last-used | NOT IMPLEMENTED beyond create, authenticate, revoke |
-| 8 | Secrets from an external key, not a generated file | PARTIAL. `DATABASE_URL` without `MERIDIAN_MASTER_KEY` now fails. Preview still keeps a local key file |
-| 9 | Forms and submissions loaded back from relational rows | PARTIAL. Boot prefers those rows when they exist |
-| 10–16 | Files, durable workflow locking, Redis, signed webhooks, broad audit, PDF templates | NOT IMPLEMENTED |
-| 17–21 | Storage contracts, ECM completion, agent services, MCP process, SDK packages | NOT IMPLEMENTED |
-| 22–32 | Imports, grid virtualization, AI providers, admin, telemetry, security pass, load tests, Helm | NOT IMPLEMENTED |
+| 1 | Gap analysis and this roadmap | COMPLETE as tracking documents |
+| 2 | Postgres migrations | COMPLETE as files `0001`–`0004`. Production refuses to boot on the embedded database |
+| 3 | Transactions for publish, submit, and task completion | COMPLETE. Each command locks its row and pins `meridian.tenant` |
+| 4 | Multi-tenant isolation | COMPLETE for API keys, task completion, and the preview snapshot. Another tenant's key cannot finish, rotate, or read the preview workspace |
+| 5 | Argon2id passwords | COMPLETE for new hashes. Production rejects scrypt. There is still no hosted password form; the preview stays open |
+| 6 | RBAC on agent, admin, platform, storage, and webhook routes | COMPLETE. Preview without a key remains the Northwind owner |
+| 7 | API key issue, authenticate, rotate, revoke | COMPLETE. Rotation and revoke are tenant scoped |
+| 8 | Master key | COMPLETE for deploy. `MERIDIAN_MASTER_KEY` is required with a managed database. The preview key stays in memory and is not written to disk |
+| 9 | Relational forms and submissions | COMPLETE for publish, submit, and worker timer reads |
+| 10 | Signed webhooks and durable outbox | COMPLETE. The worker drains the outbox and signs deliveries |
+| 11 | Worker for jobs, timers, and mail | COMPLETE. Due timers advance only in the worker. Mail is not marked sent unless SMTP accepts it |
+| 12 | Storage, ECM, SMTP, OIDC | PARTIAL. Protocol round-trips exist. Without credentials the paths stay off. No live cloud account is configured here |
+| 13 | OpenTelemetry | PARTIAL. Spans export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Compose and Helm start a collector. A cluster has not accepted the chart |
+| 14 | Helm and compose | PARTIAL. `helm template` renders the chart. Docker is not available in this workspace, so compose has not been started |
+| 15 | Playwright | COMPLETE as `e2e/agent-browser.e2e.mjs`, wired in CI |
+| 16 | Backup and restore order | COMPLETE as checksum plus table order. A production restore has not been run against a hosted database |
+| 17–21 | Angular SDK, plugins, ABAC, signed prefill, publication modes | NOT IMPLEMENTED |
+| 22 | Collaboration locks and load tests | NOT IMPLEMENTED |
 
-## Next implementation step
+## Still required before a hosted deploy
 
-Split publish and submit into their own transactions: validate, write the immutable version or the submission, write the workflow token, write the audit row, write the outbox row, commit. Stop projecting the entire workspace on each edit once those commands exist.
-
-## Explicit non-goals of this pass
-
-No empty packages. No second copy of the form renderer. No claim that a provider is connected without a successful round trip.
+Set `MERIDIAN_ENV=production`, `DATABASE_URL`, `MERIDIAN_MASTER_KEY`, and `MERIDIAN_REQUIRE_AUTH=1`. Run the worker as its own process. Leave SMTP, OIDC, S3, and ECM unset until those credentials exist. Apply the chart on a cluster this workspace cannot reach.

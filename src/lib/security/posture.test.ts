@@ -5,7 +5,7 @@ import { assertProductionPosture, runtimePosture } from "./posture.ts";
 test("production refuses the embedded database and a missing master key", () => {
   const posture = runtimePosture({ MERIDIAN_ENV: "production" } as NodeJS.ProcessEnv);
   assert.equal(posture.database, "pglite");
-  assert.equal(posture.masterKey, "local-file");
+  assert.equal(posture.masterKey, "missing");
   assert.equal(posture.connectors.smtp, false);
   assert.equal(posture.productionReady, false);
   assert.throws(() => assertProductionPosture({ MERIDIAN_ENV: "production" } as NodeJS.ProcessEnv), /DATABASE_URL/);

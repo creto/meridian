@@ -14,9 +14,20 @@ jobs:
       - run: npm install
       - run: npm run typecheck
       - run: npm test
-      - run: node --experimental-strip-types --test src/lib/authz/http-gate.test.ts src/lib/security/posture.test.ts src/lib/jobs/worker-loop.test.ts src/lib/domain/commands.test.ts src/lib/platform/closure-http.test.ts src/lib/mcp/protocol.test.ts src/lib/observe/otel-export.test.ts src/lib/identity/sessions.test.ts
+      - run: node --experimental-strip-types --test src/lib/authz/http-gate.test.ts src/lib/security/posture.test.ts src/lib/jobs/worker-loop.test.ts src/lib/domain/commands.test.ts src/lib/domain/isolation.test.ts src/lib/connectors/roundtrip.test.ts src/lib/platform/closure-http.test.ts src/lib/mcp/protocol.test.ts src/lib/observe/otel-export.test.ts src/lib/identity/sessions.test.ts
       - run: node --test scripts/backup.test.mjs scripts/check-deploy.test.mjs
       - run: node scripts/check-deploy.mjs
+      - name: helm
+        run: |
+          curl -fsSL -o /tmp/helm.tgz https://get.helm.sh/helm-v3.16.4-linux-amd64.tar.gz
+          tar --no-same-owner -xzf /tmp/helm.tgz -C /tmp
+          /tmp/linux-amd64/helm lint infrastructure/helm/meridian
+          /tmp/linux-amd64/helm template meridian infrastructure/helm/meridian > /tmp/meridian.yaml
+          grep -q 'kind: Deployment' /tmp/meridian.yaml
+          grep -q OTEL_EXPORTER_OTLP_ENDPOINT /tmp/meridian.yaml
+          grep -q meridian-otel /tmp/meridian.yaml
+      - run: npx playwright install chromium
+      - run: node --experimental-strip-types --test e2e/agent-browser.e2e.mjs
       - run: npm run formio:parity
       - run: npm run formio:parity:test
       - run: node --experimental-strip-types --test src/lib/closure/wave2.test.ts src/lib/admin/console.test.ts src/lib/pdf/editor-model.test.ts src/lib/workflow/runtime.test.ts

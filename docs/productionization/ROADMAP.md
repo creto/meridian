@@ -23,6 +23,10 @@ Status is the state of this repository on the current tree. It is not a claim th
 | 17–21 | Angular SDK, plugins, ABAC, signed prefill, publication modes | NOT IMPLEMENTED |
 | 22 | Collaboration locks and load tests | NOT IMPLEMENTED |
 
-## Still required before a hosted deploy
+## Still open
 
-Set `MERIDIAN_ENV=production`, `DATABASE_URL`, `MERIDIAN_MASTER_KEY`, and `MERIDIAN_REQUIRE_AUTH=1`. Run the worker as its own process. Leave SMTP, OIDC, S3, and ECM unset until those credentials exist. Apply the chart on a cluster this workspace cannot reach.
+1. Compose has not been started and Helm has not been applied. `helm template` renders the chart. This workspace has no Docker daemon and no Kubernetes API.
+2. SMTP, OIDC, S3, and ECM stay off. `scripts/connectors-live.mjs` exits 2 until those variables are set, then it requires a real answer. No credentials were invented.
+3. Logical restore runs against Postgres. It was executed on PostgreSQL 16.4 in this workspace and the submission was read back. A cloud-hosted database was not available.
+4. Not part of the internal deploy: Angular SDK, plugins, ABAC, signed prefill, publication modes, collaboration locks, and load tests. Those are not built.
+

@@ -30,4 +30,4 @@ jobs:
       - name: browser
         run: npx playwright install chromium && node --experimental-strip-types --test e2e/agent-browser.e2e.mjs
       - name: deploy files
-        run: node scripts/check-deploy.mjs && node --test scripts/backup.test.mjs scripts/check-deploy.test.mjs
+        run: node scripts/check-deploy.mjs && node --test scripts/backup.test.mjs scripts/restore-apply.test.mjs scripts/check-deploy.test.mjs

@@ -12,7 +12,7 @@ Meridian serves the web UI and the HTTP API from one Node process in preview. `s
 
 - `infrastructure/docker-compose.yml` runs Postgres, an OTLP collector, migrate, web, and the worker. It does not start a privileged container.
 - `infrastructure/helm/meridian` renders web, worker, and `otel-collector`. Secrets stay in `envFromSecret`. The chart sets `MERIDIAN_ENV`, `MERIDIAN_REQUIRE_AUTH`, and `OTEL_EXPORTER_OTLP_ENDPOINT`.
-- `helm template` can render this chart. This workspace has no Docker daemon, so the compose file has not been started and the chart has not been applied to a cluster.
+- `helm template` renders this chart, including the collector. Docker is not installed here, and a Kubernetes API is not reachable, so compose was not started and the chart was not applied.
 
 ## Order
 

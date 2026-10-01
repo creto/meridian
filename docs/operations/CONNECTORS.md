@@ -9,4 +9,4 @@ Without credentials the connector stays off. A job is not marked sent, uploaded,
 | S3 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | SigV4 PUT then GET of `meridian-healthcheck.txt` |
 | ECM | `ECM_BASE_URL` | PUT then GET. Private addresses are blocked in production |
 
-`src/lib/connectors/roundtrip.test.ts` runs those four dialogues against local servers. That is not a tenant's SMTP, IdP, bucket, or ECM. Compose leaves SMTP and OIDC unset on purpose.
+`node scripts/connectors-live.mjs` exits 2 while any of those variables is missing. It does not report success for a connector that has not answered.

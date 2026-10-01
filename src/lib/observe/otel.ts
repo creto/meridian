@@ -134,6 +134,17 @@ export class Tracer {
   }
 }
 
+export async function exportOtlp(tracer: Tracer, fetchImpl: typeof fetch = fetch, env: NodeJS.ProcessEnv = process.env): Promise<{ exported: boolean; reason?: string; status?: number }> {
+  const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim().replace(/\/$/, "");
+  if (!endpoint) return { exported: false, reason: "OTEL_EXPORTER_OTLP_ENDPOINT is not set" };
+  const response = await fetchImpl(`${endpoint}/v1/traces`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(tracer.exportOtlpJson()),
+  });
+  return { exported: response.ok, status: response.status, reason: response.ok ? undefined : `HTTP ${response.status}` };
+}
+
 export function childTraceParent(span: SpanRecord): string {
   return formatTraceParent({ version: "00", traceId: span.traceId, spanId: span.spanId, flags: "01" });
 }

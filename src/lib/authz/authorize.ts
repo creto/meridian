@@ -85,6 +85,8 @@ const LEGACY: Partial<Record<Action, Permission>> = {
   "integration.read": "integration.manage",
   "storage.manage": "storage.manage",
   "storage.read": "storage.manage",
+  "webhook.manage": "integration.manage",
+  "webhook.read": "integration.manage",
   "api_client.manage": "api.manage",
   "api_client.read": "api.manage",
   "tenant.manage": "tenant.manage",

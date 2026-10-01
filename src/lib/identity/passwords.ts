@@ -19,7 +19,7 @@ export async function hashPassword(password: string): Promise<string> {
   });
 }
 
-export async function verifyPassword(password: string, record: string): Promise<boolean> {
+export async function verifyPassword(password: string, record: string, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
   if (record.startsWith("$argon2id$")) {
     try {
       return await argon2Verify({ password, hash: record });
@@ -27,6 +27,7 @@ export async function verifyPassword(password: string, record: string): Promise<
       return false;
     }
   }
+  if (env.MERIDIAN_ENV === "production") return false;
   return verifyScrypt(password, record);
 }
 

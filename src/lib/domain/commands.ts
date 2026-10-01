@@ -41,6 +41,7 @@ export async function publishForm(db: Queryable, tenantId: string, form: FormDef
     return { ok: false, code: "LINT", message: issues.find((issue) => issue.level === "error")?.message ?? "Form cannot be published" };
   }
   const ws = await ensureWorkspace(db, tenantId);
+  await db.query("select id from forms where tenant_id = $1 and id = $2 for update", [tenantId, form.id]);
   if (form.status === "published" && !form.hasUnpublishedChanges) return { ok: true, version: form.version };
   const useVersion = form.versions.length === 0 ? Math.max(1, form.version || 1) : form.version + 1;
   const existing = await db.query<{ schema: unknown }>(
@@ -135,6 +136,7 @@ export async function submitForm(
   if (form.status === "archived") return { ok: false, code: "ARCHIVED", message: "This form is archived" };
   const hash = sha(input.data);
   if (input.idempotencyKey) {
+    await db.query("select key from idempotency_records where tenant_id = $1 and key = $2 for update", [tenantId, input.idempotencyKey]);
     const prior = await db.query<{ request_hash: string; response: { submissionId?: string } | string }>(
       "select request_hash, response from idempotency_records where tenant_id = $1 and key = $2",
       [tenantId, input.idempotencyKey],

@@ -16,6 +16,8 @@ import { planExportJob, type SubmissionFilter } from "../search/export-job.ts";
 import { platformOpenApi } from "../developer/openapi.ts";
 import { connectorMatrix } from "../storage/capability.ts";
 import { applySecurityHeaders } from "../security/http.ts";
+import { guard } from "../authz/http-gate.ts";
+import type { Action } from "../authz/authorize.ts";
 
 export interface PlatformRequest {
   method: string;
@@ -23,6 +25,7 @@ export interface PlatformRequest {
   body?: unknown;
   now?: string;
   secret?: string;
+  authorization?: string;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -38,8 +41,22 @@ const exportRows: Array<Record<string, unknown> & { id: string; created_at: stri
   { id: "sub_1", created_at: "2026-09-01T00:00:00.000Z", form_id: "supplier", status: "submitted", vendor: "Northwind" },
 ];
 
+function platformAction(method: string, parts: string[]): Action {
+  if (parts[0] === "abac" || parts[0] === "admin") return "admin";
+  if (parts[0] === "oidc" || parts[0] === "flags") return "integration.manage";
+  if (parts[0] === "jobs") return method === "GET" ? "workflow.read" : "workflow.manage";
+  if (parts[0] === "connectors") return "integration.read";
+  return method === "GET" ? "form.read" : "form.update";
+}
+
 export async function handlePlatform(request: PlatformRequest, deps?: Partial<LookupDeps>): Promise<Response> {
   const parts = request.path.split("/").filter(Boolean);
+  const gated = await guard(
+    new Request("http://meridian.local/api/platform", { headers: request.authorization ? { authorization: request.authorization } : {} }),
+    platformAction(request.method, parts),
+    { type: "platform", id: parts[0] },
+  );
+  if (!gated.ok) return gated.response;
   const body = record(request.body);
   const now = request.now ?? new Date().toISOString();
 

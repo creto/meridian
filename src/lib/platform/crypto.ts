@@ -27,7 +27,7 @@ export function randomToken(bytes = 32): string {
   return randomBytes(bytes).toString("base64url");
 }
 
-/** High-entropy API secrets are hashed with SHA-256. Passwords use scrypt. */
+/** High-entropy API secrets are hashed with SHA-256. User passwords use Argon2id. */
 export function hashApiSecret(secret: string): string {
   return sha256Text(secret);
 }

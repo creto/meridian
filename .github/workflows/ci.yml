@@ -14,6 +14,9 @@ jobs:
       - run: npm install
       - run: npm run typecheck
       - run: npm test
+      - run: node --experimental-strip-types --test src/lib/authz/http-gate.test.ts src/lib/security/posture.test.ts src/lib/jobs/worker-loop.test.ts src/lib/domain/commands.test.ts src/lib/platform/closure-http.test.ts src/lib/mcp/protocol.test.ts src/lib/observe/otel-export.test.ts src/lib/identity/sessions.test.ts
+      - run: node --test scripts/backup.test.mjs scripts/check-deploy.test.mjs
+      - run: node scripts/check-deploy.mjs
       - run: npm run formio:parity
       - run: npm run formio:parity:test
       - run: node --experimental-strip-types --test src/lib/closure/wave2.test.ts src/lib/admin/console.test.ts src/lib/pdf/editor-model.test.ts src/lib/workflow/runtime.test.ts

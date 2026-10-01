@@ -3,7 +3,13 @@ import { handlePlatform } from "@/lib/platform/closure-http";
 
 async function dispatch(method: string, request: Request, splat: string): Promise<Response> {
   const body = method === "GET" ? undefined : await request.json().catch(() => ({}));
-  return handlePlatform({ method, path: splat, body, secret: request.headers.get("x-meridian-secret") ?? undefined });
+  return handlePlatform({
+    method,
+    path: splat,
+    body,
+    secret: request.headers.get("x-meridian-secret") ?? undefined,
+    authorization: request.headers.get("authorization") ?? undefined,
+  });
 }
 
 export const Route = createFileRoute("/api/platform/$")({

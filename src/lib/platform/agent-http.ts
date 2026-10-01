@@ -1,20 +1,19 @@
 import { incidentForm, supplierForm } from "../forms/templates.ts";
 import { validateForm } from "../forms/engine.ts";
-import { settleCaptcha } from "../forms/captcha.ts";
 import { generateFormFromText } from "../forms/generate.ts";
-import { uid } from "../forms/ids.ts";
 import { toCapabilities, toJsonSchema, toToolDefinition } from "../forms/schema-export.ts";
 import { mcpTools } from "./mcp.ts";
-import { advanceServices, startWorkflow } from "../forms/workflow-run.ts";
+import { advanceServices } from "../forms/workflow-run.ts";
 import type { FormDefinition, Submission } from "../forms/types.ts";
 import { mutateSnapshot, readSnapshot, writeSnapshot, type WorkspaceSnapshot } from "./snapshot.ts";
 import { bootPlatform, persistSnapshot, sameWorkspace } from "./durable-server.ts";
 import { workspaceHash } from "./durable.ts";
-import { getSql, withTransaction } from "../db.ts";
+import { getSql } from "../db.ts";
 import { WORKSPACE_TENANT } from "../domain/workspace-store.ts";
-import { completeWorkflowTask, publishForm } from "../domain/commands.ts";
-import { authorize } from "../authz/authorize.ts";
-import { authenticatePresentedKey } from "./api-keys.ts";
+import { completeWorkflowTask, publishForm, submitForm } from "../domain/commands.ts";
+import { authorize, type Action } from "../authz/authorize.ts";
+import { guard } from "../authz/http-gate.ts";
+import { runTenantCommand } from "../domain/tx.ts";
 import type { WorkspaceRole } from "./rbac.ts";
 import { applySecurityHeaders } from "../security/http.ts";
 
@@ -61,32 +60,43 @@ function findForm(nameOrId: string): FormDefinition | undefined {
   return snap.forms.find((form) => form.name === nameOrId || form.id === nameOrId);
 }
 
+function agentAction(method: string, parts: string[]): Action | "public" {
+  if (method === "GET" && parts[0] === "health") return "public";
+  if (parts[0] === "sync") return method === "GET" ? "form.read" : "form.update";
+  if (method === "GET" && parts[0] === "forms") return "form.read";
+  if (method === "POST" && parts[0] === "forms" && parts[1] === "generate") return "form.create";
+  if (method === "POST" && parts[2] === "validate-object") return "form.read";
+  if (method === "POST" && parts[2] === "submit-object") return "submission.create";
+  if (parts[0] === "submissions" && method === "GET") return "submission.read";
+  if (parts[0] === "submissions" && method === "PATCH") return "submission.update";
+  if (method === "POST" && parts[2] === "publish") return "form.publish";
+  if (method === "POST" && parts[0] === "workflows") return "workflow.task.complete";
+  if (parts[0] === "jobs" && method === "GET") return "workflow.read";
+  if (parts[0] === "jobs") return "workflow.manage";
+  if (parts[0] === "mcp") return "agent.execute";
+  return "form.read";
+}
+
 export async function handleAgent(method: string, path: string, request: Request): Promise<Response> {
   try {
     await bootPlatform();
   } catch (error) {
     console.error("[agent] persistence unavailable:", error instanceof Error ? error.message : error);
   }
-  await resumeTimers();
-  await ensureSeed();
   const parts = path.split("/").filter(Boolean);
+  const action = agentAction(method, parts);
   let tenantId = WORKSPACE_TENANT;
   let role: WorkspaceRole = "owner";
-  const bearer = request.headers.get("authorization");
-  if (bearer?.toLowerCase().startsWith("bearer ")) {
-    try {
-      const sql = await getSql();
-      const auth = await authenticatePresentedKey(sql, bearer.slice(7).trim());
-      if (!auth) return json({ error: { code: "UNAUTHORIZED", message: "API key was rejected" } }, 401);
-      tenantId = auth.tenantId;
-      const known: WorkspaceRole[] = ["owner", "designer", "clerk", "reviewer", "agent", "viewer"];
-      role = known.includes(auth.role as WorkspaceRole) ? (auth.role as WorkspaceRole) : "agent";
-    } catch (error) {
-      return json({ error: { code: "UNAUTHORIZED", message: error instanceof Error ? error.message : "API key check failed" } }, 401);
-    }
+  if (action !== "public") {
+    const gated = await guard(request, action, { type: parts[0] ?? "api", id: parts[1] });
+    if (!gated.ok) return gated.response;
+    tenantId = gated.actor.tenantId;
+    role = gated.actor.role;
+    await resumeTimers();
+    await ensureSeed();
   }
-  const allow = (action: Parameters<typeof authorize>[0]["action"], type: string, id?: string) =>
-    authorize({ actor: { tenantId, userId: "api", role }, action, resource: { tenantId, type, id } });
+  const allow = (next: Action, type: string, id?: string) =>
+    authorize({ actor: { tenantId, userId: "api", role }, action: next, resource: { tenantId, type, id } });
   if (method === "GET" && parts[0] === "health" && parts[1] === "live") return json({ ok: true, status: "live" });
   if (method === "GET" && parts[0] === "health" && parts[1] === "ready") return json({ ok: true, status: "ready", persistence: "postgresql" });
   if (method === "POST" && parts[0] === "sync") {
@@ -151,27 +161,15 @@ export async function handleAgent(method: string, path: string, request: Request
         if (existing) return json({ submissionId: existing.id, status: existing.status, workflow: existing.workflow });
       }
     }
-    const errors = validateForm(form, data);
-    if (Object.keys(errors).length) return json({ error: { code: "FORM_VALIDATION_FAILED", message: "Submission contains invalid fields", details: errors } }, 422);
-    const settled = settleCaptcha(form.components, data);
-    if (!settled.ok) return json({ error: { code: "FORM_VALIDATION_FAILED", message: "Submission contains invalid fields", details: settled.errors } }, 422);
-    const stored = settled.data;
-    const now = new Date().toISOString();
-    let submission: Submission = {
-      id: uid("sub"),
-      formId: form.id,
-      formName: form.name,
-      formVersion: form.version,
-      createdAt: now,
-      updatedAt: now,
-      status: form.workflow ? "in_review" : "submitted",
-      data: stored,
-      revisions: [],
-      documents: [],
-      workflow: startWorkflow(form, "agent"),
-      idempotencyKey: key,
-    };
+    const result = await runTenantCommand(tenantId, (sql) => submitForm(sql, tenantId, form, { data, actor: role, idempotencyKey: key }));
+    if (!result.ok || !result.submission) {
+      const status = result.code === "IDEMPOTENCY_CONFLICT" ? 409 : 422;
+      return json({ error: { code: result.code ?? "FORM_VALIDATION_FAILED", message: result.message ?? "Submission was rejected", details: result.errors } }, status);
+    }
+    if (result.replay) return json({ submissionId: result.submission.id, status: result.submission.status, replay: true });
+    let submission = result.submission;
     submission = await advanceServices(form, submission, "Meridian");
+    const now = submission.updatedAt;
     mutateSnapshot((current) => ({
       ...current,
       revision: current.revision + 1,
@@ -205,7 +203,7 @@ export async function handleAgent(method: string, path: string, request: Request
     if (!form) return json({ error: { code: "NOT_FOUND", message: "Form not found" } }, 404);
     const decision = allow("form.publish", "form", form.id);
     if (!decision.allow) return json({ error: { code: "FORBIDDEN", message: decision.reason } }, 403);
-    const result = await withTransaction((sql) => publishForm(sql, tenantId, form, role, "Published from the agent API"));
+    const result = await runTenantCommand(tenantId, (sql) => publishForm(sql, tenantId, form, role, "Published from the agent API"));
     return json(result, result.ok ? 200 : 422);
   }
   if (method === "POST" && parts[0] === "workflows" && parts[1] === "tasks" && parts[3] === "complete") {
@@ -213,7 +211,7 @@ export async function handleAgent(method: string, path: string, request: Request
     if (!decision.allow) return json({ error: { code: "FORBIDDEN", message: decision.reason } }, 403);
     const body = (await request.json()) as { decision?: "approve" | "reject" | "changes"; comment?: string };
     if (!body.decision) return json({ error: { code: "BAD_REQUEST", message: "decision is required" } }, 400);
-    const result = await withTransaction((sql) => completeWorkflowTask(sql, tenantId, { taskId: parts[2] ?? "", actor: role, decision: body.decision ?? "approve", comment: body.comment }));
+    const result = await runTenantCommand(tenantId, (sql) => completeWorkflowTask(sql, tenantId, { taskId: parts[2] ?? "", actor: role, decision: body.decision ?? "approve", comment: body.comment }));
     return json(result, result.ok ? 200 : result.code === "NOT_FOUND" ? 404 : 409);
   }
   if (parts[0] === "jobs") {

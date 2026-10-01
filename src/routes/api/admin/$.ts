@@ -4,6 +4,7 @@ import { getSql } from "@/lib/db";
 import { replaceOverlays } from "@/lib/pdf/overlay-store";
 import type { Placement } from "@/lib/pdf/editor-model";
 import { applySecurityHeaders } from "@/lib/security/http";
+import { guard } from "@/lib/authz/http-gate";
 
 function json(body: unknown, status = 200): Response {
   return applySecurityHeaders(Response.json(body, { status }));
@@ -15,15 +16,20 @@ function splatOf(params: unknown): string {
 
 async function read(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const tenantId = url.searchParams.get("tenant") || CONSOLE_TENANT;
+  const asked = url.searchParams.get("tenant") || CONSOLE_TENANT;
+  const gated = await guard(request, "tenant.read", { tenantId: asked, type: "tenant", id: asked });
+  if (!gated.ok) return gated.response;
   const sql = await getSql();
-  const snapshot = await consoleSnapshot(sql, tenantId);
+  const snapshot = await consoleSnapshot(sql, gated.actor.tenantId === asked ? asked : gated.actor.tenantId);
   return json(snapshot);
 }
 
 async function write(request: Request, splat: string): Promise<Response> {
   const url = new URL(request.url);
-  const tenantId = url.searchParams.get("tenant") || CONSOLE_TENANT;
+  const asked = url.searchParams.get("tenant") || CONSOLE_TENANT;
+  const gated = await guard(request, "admin", { tenantId: asked, type: "tenant", id: asked });
+  if (!gated.ok) return gated.response;
+  const tenantId = asked;
   const body = await request.json().catch(() => null) as (ConsoleCommand & { templateId?: string; templateVersion?: number; placements?: Placement[] }) | null;
   if (!body) return json({ error: { code: "BAD_REQUEST", message: "JSON body is required" } }, 400);
   const sql = await getSql();

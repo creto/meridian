@@ -129,6 +129,7 @@ test("argon2id verifies and scrypt records still verify", async () => {
   const legacy = hashPasswordScrypt("legacy");
   assert.equal(await verifyPassword("legacy", legacy), true);
   assert.equal(await verifyPassword("nope", legacy), false);
+  assert.equal(await verifyPassword("legacy", legacy, { MERIDIAN_ENV: "production" } as NodeJS.ProcessEnv), false);
 });
 
 test("api keys are hashed, rotatable, and tenant scoped", async () => {

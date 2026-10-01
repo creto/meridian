@@ -1,4 +1,5 @@
-import { auditHash, decryptSecret, encryptSecret, hashApiSecret, passwordRecord, randomToken, sha256Text, verifyPassword } from "./crypto.ts";
+import { auditHash, decryptSecret, encryptSecret, hashApiSecret, randomToken, sha256Text } from "./crypto.ts";
+import { hashPassword, verifyPassword } from "../identity/passwords.ts";
 
 export interface Queryable {
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
@@ -31,12 +32,13 @@ export async function seedPlatform(db: Queryable, masterKey: Buffer, password = 
     { id: "usr_ada", tenantId: "ten_northwind", email: "ada@northwind.example", name: "Ada North", role: "owner" },
     { id: "usr_ben", tenantId: "ten_contoso", email: "ben@contoso.example", name: "Ben Contoso", role: "owner" },
   ];
+  const passwordHash = await hashPassword(password);
   for (const user of users) {
     await db.query(
       `insert into users (id, tenant_id, email, name, password_hash, role)
        values ($1, $2, $3, $4, $5, $6)
        on conflict (id) do nothing`,
-      [user.id, user.tenantId, user.email, user.name, passwordRecord(password), user.role],
+      [user.id, user.tenantId, user.email, user.name, passwordHash, user.role],
     );
   }
   await putSecret(db, masterKey, "ten_northwind", "demo-note", "northwind-only");
@@ -50,7 +52,7 @@ export async function login(db: Queryable, email: string, password: string): Pro
   );
   const user = rows[0];
   if (!user || user.disabled || user.locked) return null;
-  if (!verifyPassword(password, user.password_hash)) return null;
+  if (!(await verifyPassword(password, user.password_hash))) return null;
   const token = randomToken();
   const id = `ses_${randomToken(8)}`;
   await db.query(

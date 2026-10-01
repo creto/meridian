@@ -2,11 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { runStoragePut } from "@/lib/storage/execute";
 import { getVaultSecret } from "@/lib/storage/vault";
 import type { StorageKind } from "@/lib/storage/types";
+import { guard } from "@/lib/authz/http-gate";
 
 export const Route = createFileRoute("/api/storage/put")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const gated = await guard(request, "storage.manage", { type: "storage" });
+        if (!gated.ok) return gated.response;
         const body = (await request.json()) as {
           connectionId?: string;
           kind?: StorageKind;

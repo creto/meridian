@@ -316,6 +316,26 @@ test("cross-tenant resource reads are forbidden and do not call getForm", async 
   assert.deepEqual(calls, ["getForm"]);
 });
 
+test("a tool cannot name another tenant", async () => {
+  let called = false;
+  const { host } = createHost({
+    listForms: () => {
+      called = true;
+      return [];
+    },
+  });
+  const denied = asFailure(
+    await handleMcpMessage(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "forms.list", arguments: { tenantId: "ten_contoso" } } },
+      ctx(["forms.list"]),
+      host,
+    ),
+  );
+  assert.equal(denied.error.code, JsonRpcCode.Forbidden);
+  assert.equal(denied.error.message, "wrong-tenant");
+  assert.equal(called, false);
+});
+
 test("tool execution errors redact argument secrets and hide the thrown message", async () => {
   const secret = "super-secret-value";
   const { host } = createHost({

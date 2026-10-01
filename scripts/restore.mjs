@@ -13,7 +13,7 @@ export function planRestore(directory) {
   const statements = [];
   for (const table of ORDER) {
     const body = files[`${table}.jsonl`];
-    if (!body) continue;
+    if (body == null) continue;
     const rows = body.split("\n").filter(Boolean).map((line) => JSON.parse(line));
     statements.push({ table, rows: rows.length });
   }

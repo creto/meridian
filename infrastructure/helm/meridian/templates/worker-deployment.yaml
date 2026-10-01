@@ -25,7 +25,7 @@ spec:
         - name: worker
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: ["node", "scripts/worker.mjs"]
+          args: ["node", "--experimental-strip-types", "scripts/worker.mjs"]
           envFrom:
             - secretRef:
                 name: {{ .Values.envFromSecret }}

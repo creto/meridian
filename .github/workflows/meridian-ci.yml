@@ -1,6 +1,7 @@
 name: meridian-ci
 
 on:
+  push:
   pull_request:
 
 jobs:
@@ -17,6 +18,8 @@ jobs:
         run: npm ci
       - name: typecheck
         run: npm run typecheck
-      - name: test
-        run: node --experimental-strip-types --test src/lib/i18n/catalog.test.ts src/lib/retention/jobs.test.ts src/lib/security/scan.test.ts
+      - name: platform
+        run: node --experimental-strip-types --test src/lib/authz/http-gate.test.ts src/lib/security/posture.test.ts src/lib/jobs/worker-loop.test.ts src/lib/domain/commands.test.ts src/lib/platform/closure-http.test.ts src/lib/mcp/protocol.test.ts src/lib/observe/otel-export.test.ts src/lib/identity/sessions.test.ts
+      - name: deploy files
+        run: node scripts/check-deploy.mjs && node --test scripts/backup.test.mjs scripts/check-deploy.test.mjs
       # e2e/playwright is not wired

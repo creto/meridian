@@ -1,13 +1,15 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { join } from "node:path";
 import { withTransaction } from "../db.ts";
 import type { WorkspaceSnapshot } from "./snapshot.ts";
 import { readSnapshot, writeSnapshot } from "./snapshot.ts";
 import { loadWorkspace, saveWorkspace, seedPlatform, workspaceHash, type WorkspacePayload } from "./durable.ts";
 import { loadTenantWorkspace, replaceTenantWorkspace, WORKSPACE_TENANT } from "../domain/workspace-store.ts";
+import { assertProductionPosture } from "../security/posture.ts";
+import { startJobPump } from "../jobs/worker-loop.ts";
 
 let booted: Promise<void> | null = null;
+
+const memoryKey = globalThis as typeof globalThis & { __meridianMasterKey__?: Buffer };
 
 export function masterKey(): Buffer {
   const fromEnv = process.env.MERIDIAN_MASTER_KEY;
@@ -16,22 +18,16 @@ export function masterKey(): Buffer {
     if (key.length !== 32) throw new Error("MERIDIAN_MASTER_KEY must decode to 32 bytes");
     return key;
   }
-  // A deployed database must not invent a key and store it next to the data.
-  if (process.env.DATABASE_URL?.trim()) {
-    throw new Error("MERIDIAN_MASTER_KEY is required when DATABASE_URL is set");
+  if (process.env.DATABASE_URL?.trim() || process.env.MERIDIAN_ENV === "production") {
+    throw new Error("MERIDIAN_MASTER_KEY is required");
   }
-  const path = join(process.cwd(), "data", "master.key");
-  if (!existsSync(path)) {
-    mkdirSync(join(process.cwd(), "data"), { recursive: true });
-    writeFileSync(path, randomBytes(32));
-  }
-  const key = readFileSync(path);
-  if (key.length !== 32) throw new Error("data/master.key must be 32 bytes");
-  return key;
+  memoryKey.__meridianMasterKey__ ??= randomBytes(32);
+  return memoryKey.__meridianMasterKey__;
 }
 
 export function bootPlatform(): Promise<void> {
   booted ??= (async () => {
+    assertProductionPosture();
     await withTransaction(async (sql) => {
       await seedPlatform(sql, masterKey());
       const relational = await loadTenantWorkspace(sql, WORKSPACE_TENANT);
@@ -48,6 +44,7 @@ export function bootPlatform(): Promise<void> {
         await replaceTenantWorkspace(sql, WORKSPACE_TENANT, stored);
       }
     });
+    startJobPump();
   })().catch((error) => {
     booted = null;
     throw error;

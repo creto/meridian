@@ -352,6 +352,8 @@ function toolResult(value: unknown): unknown {
 }
 
 async function invokeTool(name: McpToolName, args: Record<string, unknown>, ctx: McpContext, host: McpHost): Promise<unknown> {
+  const asked = firstString(args, ["tenantId", "tenant"]);
+  if (asked && asked !== ctx.tenantId) throw new ToolFailure(JsonRpcCode.Forbidden, "wrong-tenant");
   const tenantId = ctx.tenantId;
   switch (name) {
     case "forms.list":

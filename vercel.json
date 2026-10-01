@@ -2,5 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "tanstack-start",
   "installCommand": "npm install --omit=dev --no-audit --no-fund",
-  "buildCommand": "npm run build"
+  "buildCommand": "npm run build",
+  "env": {
+    "VITE_PUBLIC_HOSTNAME": "meridian4us.vercel.app"
+  }
 }

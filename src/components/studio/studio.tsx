@@ -206,7 +206,7 @@ export function Studio({ formId }: { formId: string }) {
   return (
     <div className="flex h-screen flex-col bg-chrome text-chrome-fg">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-chrome-line px-3">
-        <Link to="/" aria-label="All forms" className="text-chrome-fg"><Mark className="size-6" /></Link>
+        <Link to="/" aria-label="All forms" className="text-chrome-fg"><Mark className="size-6" invert /></Link>
         <input
           value={form.title}
           aria-label="Form title"

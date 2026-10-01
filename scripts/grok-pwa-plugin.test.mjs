@@ -286,6 +286,24 @@ test("published VITE_PUBLIC_HOSTNAME wins over request Host for og:image", () =>
   }
 });
 
+test("explicit VITE_PUBLIC_HOSTNAME on vercel.app emits og:image", () => {
+  const prev = process.env.VITE_PUBLIC_HOSTNAME;
+  process.env.VITE_PUBLIC_HOSTNAME = "meridian4us.vercel.app";
+  try {
+    const out = injectGrokPwaHead("<html><head><title>Meridian</title></head></html>", {
+      host: "meridian-hxku1ynx4-tiglobal.vercel.app",
+      site: { title: "Meridian", card: "custom", image: "/og.jpg" },
+    });
+    assert.match(
+      out,
+      /property="og:image" content="https:\/\/meridian4us\.vercel\.app\/og\.jpg"/,
+    );
+  } finally {
+    if (prev === undefined) delete process.env.VITE_PUBLIC_HOSTNAME;
+    else process.env.VITE_PUBLIC_HOSTNAME = prev;
+  }
+});
+
 test("vercel Host without a public hostname emits no og:image", () => {
   const prev = process.env.VITE_PUBLIC_HOSTNAME;
   delete process.env.VITE_PUBLIC_HOSTNAME;

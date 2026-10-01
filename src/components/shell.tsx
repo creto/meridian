@@ -19,23 +19,23 @@ export function BootScreen() {
   return (
     <div className="grid min-h-screen place-items-center bg-chrome text-chrome-fg">
       <div className="grid justify-items-center gap-3">
-        <Mark />
+        <Mark invert />
         <p className="text-sm text-chrome-muted">Meridian</p>
       </div>
     </div>
   );
 }
 
-export function Mark({ className }: { className?: string }) {
+export function Mark({ className, invert = false }: { className?: string; invert?: boolean }) {
   return (
-    <svg viewBox="150 190 1040 880" className={cn("size-7", className)} aria-hidden="true">
-      <g fill="none" stroke="currentColor" strokeWidth="138" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M256 292 L468 622 L256 953" />
-        <path d="M445 292 L657 622 L445 953" />
-        <path d="M634 292 L846 622 L634 953" />
-        <path d="M823 292 L1035 622 L823 953" />
-      </g>
-    </svg>
+    <img
+      src="/logo.png"
+      alt=""
+      width={28}
+      height={28}
+      className={cn("size-7 object-contain", invert && "brightness-0 invert", className)}
+      aria-hidden="true"
+    />
   );
 }
 

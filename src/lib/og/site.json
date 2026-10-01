@@ -2,5 +2,6 @@
   "title": "Meridian",
   "type": "website",
   "card": "custom",
+  "image": "/og.jpg",
   "description": "Dynamic forms for people and agents."
 }

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getVaultSecret, setVaultSecret } from "@/lib/storage/vault";
 import { sha256Hex } from "@/lib/storage/sigv4";
 import { guard } from "@/lib/authz/http-gate";
+import { blockedDestination } from "@/lib/security/ssrf";
 
 export const Route = createFileRoute("/api/hooks/deliver")({
   server: {
@@ -11,6 +12,8 @@ export const Route = createFileRoute("/api/hooks/deliver")({
         if (!gated.ok) return gated.response;
         const body = (await request.json()) as { webhookId?: string; url?: string; secret?: string; event?: string; payload?: unknown };
         if (!body.url || !body.event) return Response.json({ ok: false, message: "url and event are required" }, { status: 400 });
+        const blocked = blockedDestination(body.url);
+        if (blocked) return Response.json({ ok: false, message: blocked }, { status: 400 });
         if (body.webhookId && body.secret) setVaultSecret(body.webhookId, body.secret);
         if (body.event === "webhook.secret") {
           return Response.json({ ok: true, stored: Boolean(body.webhookId && body.secret), delivered: false });

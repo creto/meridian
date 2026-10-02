@@ -7,6 +7,7 @@ import { interpolatePath } from "../storage/http.ts";
 import { lookupConnection } from "../storage/connection-cache.ts";
 import { readLocalObject, saveLocalObject } from "../storage/local.ts";
 import type { FormDefinition, Submission, SubmissionStatus, WorkflowState } from "./types.ts";
+import { blockedDestination } from "../security/ssrf.ts";
 
 export function edgeTo(form: FormDefinition, from: string, when: string): string | null {
   return form.workflow?.edges.find((edge) => edge.from === from && (edge.when ?? "approved") === when)?.to ?? null;
@@ -187,6 +188,11 @@ export async function advanceServices(form: FormDefinition, submission: Submissi
         break;
       }
       try {
+        const blocked = blockedDestination(node.url);
+        if (blocked) {
+          history.push({ node: node.id, at: new Date().toISOString(), action: "http-failed", actor, note: blocked });
+          break;
+        }
         const response = await fetch(node.url, {
           method: "POST",
           headers: { "content-type": "application/json" },

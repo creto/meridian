@@ -7,6 +7,7 @@ import { validateForm } from "./engine.ts";
 import { settleCaptcha } from "./captcha.ts";
 import { uid } from "./ids.ts";
 import { lintBlocksPublish, lintForm, type LintIssue } from "./lint.ts";
+import { validateWorkflow } from "../workflow/graph.ts";
 import { incidentForm, supplierForm } from "./templates.ts";
 import { mapComponents } from "./tree.ts";
 import type { FormDefinition, FormVersion, IdempotencyRecord, Submission } from "./types.ts";
@@ -347,6 +348,13 @@ export const useFormStore = create<FormState>()(
         const form = get().forms.find((item) => item.id === id);
         if (!form) return { ok: false, issues: [{ level: "error", code: "MISSING", message: "Form not found" }] };
         const issues = lintForm(form);
+        if (form.workflow) {
+          for (const issue of validateWorkflow(form.workflow)) {
+            if (issue.code === "SSRF") {
+              issues.push({ level: "error", code: issue.code, message: issue.message, componentId: issue.nodeId });
+            }
+          }
+        }
         if (lintBlocksPublish(issues)) return { ok: false, issues };
         if (form.status === "published" && !form.hasUnpublishedChanges) return { ok: true, issues };
         const version = form.versions.length === 0 ? 1 : form.version + 1;

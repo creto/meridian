@@ -106,3 +106,34 @@ export function redactSecrets(text: string): string {
     .replace(/bearer\s+[A-Za-z0-9\-._~+/]+=*/gi, "***")
     .replace(/postgres:\/\/[^/\s:@]+:[^@\s/]+@/gi, "***");
 }
+
+const REDIRECT_MIN = 300;
+const REDIRECT_MAX = 400;
+
+/**
+ * Fetch a public http(s) URL without following redirects.
+ * The initial URL and any Location hop are checked with blockedDestination.
+ * Redirects are never followed (fail-closed), including a 302 toward loopback or link-local metadata.
+ */
+export async function fetchGuarded(
+  url: string,
+  init: RequestInit = {},
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
+  const blocked = blockedDestination(url);
+  if (blocked) throw new Error(blocked);
+  const response = await fetchImpl(url, { ...init, redirect: "manual" });
+  if (response.status === 0 || (response.status >= REDIRECT_MIN && response.status < REDIRECT_MAX)) {
+    const location = response.headers.get("location");
+    if (!location) throw new Error("Redirects are not followed");
+    let next: string;
+    try {
+      next = new URL(location, url).href;
+    } catch {
+      throw new Error("Redirect Location is not a valid URL");
+    }
+    const redirectBlocked = blockedDestination(next);
+    throw new Error(redirectBlocked ?? "Redirects are not followed");
+  }
+  return response;
+}

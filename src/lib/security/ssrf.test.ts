@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { blockedDestination, redactSecrets } from "./ssrf.ts";
+import { blockedDestination, fetchGuarded, redactSecrets } from "./ssrf.ts";
 
 const blocked = [
   "ftp://example.com/file",
@@ -53,4 +53,37 @@ test("redacts AWS keys, bearer tokens, and postgres passwords", () => {
   assert.equal(redacted.includes("password"), false);
   assert.equal(redacted.includes("***"), true);
   assert.equal(redacted.includes("db.internal"), true);
+});
+
+test("fetchGuarded does not follow a redirect to loopback or metadata", async () => {
+  const hops = ["http://127.0.0.1/admin", "http://169.254.169.254/latest/meta-data"];
+  for (const evil of hops) {
+    const seen: string[] = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const href = String(input);
+      seen.push(href);
+      if (init?.redirect !== "manual") {
+        seen.push(evil);
+        return new Response("leaked", { status: 200 });
+      }
+      return new Response(null, { status: 302, headers: { location: evil } });
+    }) as typeof fetch;
+    await assert.rejects(
+      () => fetchGuarded("https://example.com/hook", { method: "POST" }, fetchImpl),
+      /blocked|Private|link-local|metadata/i,
+    );
+    assert.deepEqual(seen, ["https://example.com/hook"]);
+    assert.equal(seen.includes(evil), false);
+  }
+});
+
+test("fetchGuarded returns a direct public response and still forces manual redirects", async () => {
+  let redirectMode: RequestRedirect | undefined;
+  const fetchImpl = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    redirectMode = init?.redirect;
+    return new Response("ok", { status: 200 });
+  }) as typeof fetch;
+  const response = await fetchGuarded("https://example.com/hook", { method: "POST", redirect: "follow" }, fetchImpl);
+  assert.equal(response.status, 200);
+  assert.equal(redirectMode, "manual");
 });

@@ -25,6 +25,7 @@ export function runtimePosture(env: NodeJS.ProcessEnv = process.env): RuntimePos
   if (production && database !== "postgres") problems.push("DATABASE_URL is required in production");
   if (production && masterKey !== "env") problems.push("MERIDIAN_MASTER_KEY is required in production");
   if (production && env.MERIDIAN_REQUIRE_AUTH !== "1") problems.push("MERIDIAN_REQUIRE_AUTH=1 is required in production");
+  if (production && !env.GROK_AUTH_CLIENT_SECRET?.trim()) problems.push("GROK_AUTH_CLIENT_SECRET is required in production");
   const connectors = {
     smtp: Boolean(env.SMTP_URL?.trim()),
     oidc: Boolean(env.OIDC_ISSUER?.trim() && env.OIDC_CLIENT_ID?.trim()),

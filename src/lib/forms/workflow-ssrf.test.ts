@@ -101,3 +101,43 @@ test("advanceServices allows a public https destination through the gate", async
     globalThis.fetch = original;
   }
 });
+
+test("advanceServices rejects a 302 toward loopback or metadata without following it", async () => {
+  const original = globalThis.fetch;
+  const hops = ["http://127.0.0.1/", "http://169.254.169.254/latest/meta-data"];
+  try {
+    for (const evil of hops) {
+      const seen: string[] = [];
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const href = String(input);
+        seen.push(href);
+        if (init?.redirect !== "manual") {
+          seen.push(evil);
+          return new Response("leaked", { status: 200 });
+        }
+        return new Response(null, { status: 302, headers: { location: evil } });
+      }) as typeof fetch;
+      const form = httpForm("https://example.com/hooks/meridian");
+      const submission: Submission = {
+        id: "sub_redir",
+        formId: form.id,
+        formName: form.name,
+        formVersion: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        status: "in_review",
+        data: {},
+        revisions: [],
+        documents: [],
+        workflow: { currentNode: "call", history: [] },
+      };
+      const next = await advanceServices(form, submission, "tester");
+      assert.deepEqual(seen, ["https://example.com/hooks/meridian"]);
+      assert.equal(next.workflow?.currentNode, "call");
+      const fail = next.workflow?.history.find((event) => event.action === "http-failed");
+      assert.match(String(fail?.note), /blocked|Private|link-local|metadata/i);
+    }
+  } finally {
+    globalThis.fetch = original;
+  }
+});

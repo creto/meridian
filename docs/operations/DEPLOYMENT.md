@@ -5,7 +5,7 @@ Meridian serves the web UI and the HTTP API from one Node process in preview. `s
 ## What is running
 
 - Preview uses embedded Postgres. Its master key is kept in memory for that process and is not written beside the data.
-- Production requires `MERIDIAN_ENV=production`, `DATABASE_URL`, `MERIDIAN_MASTER_KEY`, and `MERIDIAN_REQUIRE_AUTH=1`.
+- Production requires `MERIDIAN_ENV=production`, `DATABASE_URL`, `MERIDIAN_MASTER_KEY`, `MERIDIAN_REQUIRE_AUTH=1`, and `GROK_AUTH_CLIENT_SECRET`. The embedded preview OAuth secret is not a production fallback.
 - SMTP, OIDC, S3, and ECM stay off until their variables are set. A missing credential is a failure, not a successful delivery.
 
 ## Chart and compose

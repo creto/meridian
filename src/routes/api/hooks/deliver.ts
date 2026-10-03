@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getVaultSecret, setVaultSecret } from "@/lib/storage/vault";
 import { sha256Hex } from "@/lib/storage/sigv4";
 import { guard } from "@/lib/authz/http-gate";
-import { blockedDestination } from "@/lib/security/ssrf";
+import { blockedDestination, fetchGuarded } from "@/lib/security/ssrf";
 
 export const Route = createFileRoute("/api/hooks/deliver")({
   server: {
@@ -30,7 +30,7 @@ export const Route = createFileRoute("/api/hooks/deliver")({
         const attempts: { status: number; error?: string }[] = [];
         for (let i = 0; i < 3; i += 1) {
           try {
-            const response = await fetch(body.url, { method: "POST", headers, body: raw });
+            const response = await fetchGuarded(body.url, { method: "POST", headers, body: raw });
             attempts.push({ status: response.status });
             if (response.ok || (response.status < 500 && response.status !== 429)) break;
           } catch (error) {

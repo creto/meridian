@@ -30,3 +30,21 @@ export const GROK_ISSUER_DEFAULT = "https://auth.grok.me";
  * `https://<preview-host>/api/auth/oauth2/callback/...` the broker allows.
  */
 export const PREVIEW_ALLOWED_HOSTS = ["*.grok-sandbox.com"] as const;
+
+/**
+ * Broker client for this process. Production must use the injected
+ * GROK_AUTH_CLIENT_SECRET and must not fall back to the embedded preview secret.
+ * Local, dev, and non-production preview keep that fallback.
+ */
+export function grokAuthClientFromEnv(env: NodeJS.ProcessEnv = process.env): {
+  clientId: string | undefined;
+  clientSecret: string | undefined;
+} {
+  const clientId = env.GROK_AUTH_CLIENT_ID?.trim() || undefined;
+  const clientSecret = env.GROK_AUTH_CLIENT_SECRET?.trim() || undefined;
+  if (env.MERIDIAN_ENV === "production") return { clientId, clientSecret };
+  return {
+    clientId: clientId ?? PREVIEW_CLIENT_ID,
+    clientSecret: clientSecret ?? PREVIEW_CLIENT_SECRET,
+  };
+}

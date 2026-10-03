@@ -43,8 +43,7 @@ import { pgliteDialect } from "./pglite-dialect";
 import {
   GROK_ISSUER_DEFAULT,
   PREVIEW_ALLOWED_HOSTS,
-  PREVIEW_CLIENT_ID,
-  PREVIEW_CLIENT_SECRET,
+  grokAuthClientFromEnv,
 } from "./preview";
 
 // Warm PGLite for Better Auth. A missing embedded database must not take down
@@ -77,12 +76,15 @@ const env = (key: string): string | undefined => {
 // provisions auth; set it to "false" to force auth off everywhere (dev user).
 const authDisabled = env("VITE_AUTH_ENABLED") === "false";
 
-// Broker federation creds: the deployer injects a per-app client when deployed;
-// otherwise fall back to the shared live-preview client, which the broker accepts
-// for any `*.grok-sandbox.com` callback (see `./preview`).
+// Broker federation creds: the deployer injects a per-app client when deployed.
+// Outside production, fall back to the shared live-preview client, which the broker
+// accepts for any `*.grok-sandbox.com` callback (see `./preview`). Production must
+// not use that embedded secret.
 const grokIssuer = env("GROK_AUTH_ISSUER") ?? GROK_ISSUER_DEFAULT;
-const grokClientId = env("GROK_AUTH_CLIENT_ID") ?? PREVIEW_CLIENT_ID;
-const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PREVIEW_CLIENT_SECRET;
+// Production never falls back to the embedded preview client (see grokAuthClientFromEnv).
+const grokClient = grokAuthClientFromEnv();
+const grokClientId = grokClient.clientId;
+const grokClientSecret = grokClient.clientSecret;
 
 /** True when federated sign-in is active (real auth is enforced). */
 export const authConfigured =

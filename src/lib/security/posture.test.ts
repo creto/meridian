@@ -17,6 +17,7 @@ test("a managed database with a master key and required auth is production ready
     MERIDIAN_REQUIRE_AUTH: "1",
     DATABASE_URL: "postgres://meridian@db/meridian",
     MERIDIAN_MASTER_KEY: "a".repeat(64),
+    GROK_AUTH_CLIENT_SECRET: "prod-client-secret",
     SMTP_URL: "",
     OIDC_ISSUER: "https://login.example",
     OIDC_CLIENT_ID: "meridian",
@@ -26,4 +27,17 @@ test("a managed database with a master key and required auth is production ready
   assert.equal(posture.masterKey, "env");
   assert.equal(posture.connectors.oidc, true);
   assert.equal(posture.connectors.smtp, false);
+});
+
+test("production refuses the embedded preview client secret", () => {
+  const env = {
+    MERIDIAN_ENV: "production",
+    MERIDIAN_REQUIRE_AUTH: "1",
+    DATABASE_URL: "postgres://meridian@db/meridian",
+    MERIDIAN_MASTER_KEY: "a".repeat(64),
+  } as NodeJS.ProcessEnv;
+  const posture = runtimePosture(env);
+  assert.equal(posture.productionReady, false);
+  assert.ok(posture.problems.some((problem) => problem.includes("GROK_AUTH_CLIENT_SECRET")));
+  assert.throws(() => assertProductionPosture(env), /GROK_AUTH_CLIENT_SECRET/);
 });

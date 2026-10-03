@@ -1,6 +1,6 @@
 import type { Queryable } from "../platform/durable.ts";
 import { recordSignedAttempt, webhookHeaders } from "../platform/webhook-sign.ts";
-import { blockedDestination } from "../security/ssrf.ts";
+import { blockedDestination, fetchGuarded } from "../security/ssrf.ts";
 
 interface DueDelivery {
   id: string;
@@ -54,7 +54,7 @@ export async function deliverDueWebhooks(db: Queryable, options: PumpOptions): P
       continue;
     }
     try {
-      const response = await fetchImpl(row.url, { method: "POST", headers: webhookHeaders(secret, body), body });
+      const response = await fetchGuarded(row.url, { method: "POST", headers: webhookHeaders(secret, body), body }, fetchImpl);
       const outcome = await recordSignedAttempt(db, {
         tenantId: row.tenant_id,
         deliveryId: row.id,
